@@ -18,8 +18,9 @@ export const Statistics = () => {
 
 
 
-    return <div>
-      <div><b>Retention rate:</b> {(retentionRate(getNumberRepetitionsGroupedByScore(allCards)))}</div>
+    return <div class="statisticsBody">
+      <div><b>Retention rate: </b> {(retentionRate(getNumberRepetitionsGroupedByScore(allCards)))}</div>
+      <div class="vSpacing-1rem"/>
       {chart_column(
         transformObjectToCategoryFormat(getNumberRepetitionsGroupedByScore(allCards)), 
         'category', 
@@ -115,14 +116,14 @@ function chart_column(data: any[][], xaxisType: String, title: String, xMax?: nu
       dataLabels: {
         enabled: false
       },
+      title: {
+        text: title,
+      },
       colors: chartColor,
       xaxis: {
         type: xaxisType,
         tickAmount: 'dataPoints',
         max: {xMax},
-        title: {
-          text: title
-        },
         labels: {
           show: true
         }
@@ -209,9 +210,9 @@ function chart_repetionsCompounded() {
       xaxis: {
         type: 'datetime',
         tickPlacement: 'on',
-        title: {
-          text: 'Sum of repetitions over time'
-        }
+      },
+      title: {
+        text: 'Sum of repetitions over time'
       },
       dataLabels: {
         enabled: false

@@ -43,3 +43,11 @@ body,
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+.statisticsBody {
+  padding: 2rem;
+}
+
+.vSpacing-1rem {
+  height: 1rem;
+}

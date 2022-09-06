@@ -6,7 +6,7 @@ async function onActivate(plugin: ReactRNPlugin) {
   //Register statistics widget
   await plugin.app.registerWidget(
     'statistics',
-    WidgetLocation.Pane,
+    WidgetLocation.Popup,
     {
       dimensions: { height: 'auto', width: 'auto'},
     }
@@ -16,7 +16,7 @@ async function onActivate(plugin: ReactRNPlugin) {
     id: 'open-statistics',
     name: 'Open Statistics',
     action: async () => {
-      plugin.window.openWidgetInPane('statistics');
+      plugin.widget.openPopup('statistics');
     },
   });
 
