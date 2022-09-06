@@ -5,8 +5,8 @@
   "author": "henrik",
   "repoUrl": "https://github.com/Justtolook/RemNote-Statistics-Plugin",
   "version": {
-    "major": 0,
-    "minor": 1,
+    "major": 1,
+    "minor": 0,
     "patch": 0
   },
   "description": "",
@@ -15,7 +15,7 @@
   "requiredScopes": [
     {
       "type": "All",
-      "level": "ReadCreateModify"
+      "level": "Read"
     }
   ]
 }
