@@ -19,14 +19,13 @@ export const Statistics = () => {
 
 
     return <div>
-      <div>Statistics</div>
       <div><b>Retention rate:</b> {(retentionRate(getNumberRepetitionsGroupedByScore(allCards)))}</div>
       {chart_column(
         transformObjectToCategoryFormat(getNumberRepetitionsGroupedByScore(allCards)), 
         'category', 
         'Buttons pressed', 
         daysOutlook)}
-
+      
 
       {chart_column(
         getFutureDueCards(allCards, daysOutlook), 
@@ -38,6 +37,8 @@ export const Statistics = () => {
         getNumberCardsGroupedByRepetitions(allCards), 
         'category', 
         'Number of cards grouped by number of repetitions')}
+
+      {chart_repetionsCompounded()}
       
       
     </div>;
@@ -207,10 +208,17 @@ function chart_repetionsCompounded() {
     options: {
       xaxis: {
         type: 'datetime',
-        tickPlacement: 'on'
+        tickPlacement: 'on',
+        title: {
+          text: 'Sum of repetitions over time'
+        }
       },
       dataLabels: {
         enabled: false
+      },
+      stroke: {
+        colors: chartColor,
+        curve: 'smooth'
       },
       chart: {
         zoom: {
@@ -220,13 +228,8 @@ function chart_repetionsCompounded() {
         }
       },
       fill: {
-        type: 'gradient',
-        gradient: {
-          shadeIntensity: 1,
-          opacityFrom: 1,
-          opacityTo: 0.5,
-          stops: [0, 90]
-        }
+        type: 'solid',
+        colors: chartColor
       },
       tooltip: {
         enabled: true,
@@ -240,7 +243,7 @@ function chart_repetionsCompounded() {
     }]
   }
 
-  return <div><div>Sum of repetitions over time</div><Chart
+  return <div><Chart
     options={chart.options}
     series={chart.series}
     type="area"
