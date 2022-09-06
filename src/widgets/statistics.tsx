@@ -2,22 +2,63 @@ import { usePlugin, renderWidget, useTracker, Card, CardNamespace, Rem, useRunAs
 import Chart from 'react-apexcharts';
 
 /* Constants */
+var chartColor = '#3362f0';
 
 /* Functions */
 export const Statistics = () => {
     const plugin = usePlugin();
     const allCards = getAllCards();
+    const daysOutlook = 30;
+
+    //check if color setting is a valid hex color (not case sensitive)
+    const chartColorSettings = useTracker(() => plugin.settings.getSetting('statistics-chart-color'));
+    if(/^#[0-9A-F]{6}$/i.test(chartColorSettings)) {
+      chartColor = chartColorSettings;
+    }
+
 
 
     return <div>
       <div>Statistics</div>
-      <div>Future Due: {JSON.stringify(getFutureDueCards(allCards))}</div>
-      {chart_column(getFutureDueCards(allCards))}
+      <div><b>Retention rate:</b> {(retentionRate(getNumberRepetitionsGroupedByScore(allCards)))}</div>
+      {chart_column(
+        transformObjectToCategoryFormat(getNumberRepetitionsGroupedByScore(allCards)), 
+        'category', 
+        'Buttons pressed', 
+        daysOutlook)}
+
+
+      {chart_column(
+        getFutureDueCards(allCards, daysOutlook), 
+        'datetime', 
+        'Number of cards due in future', 
+        daysOutlook)}
+
+      {chart_column(
+        getNumberCardsGroupedByRepetitions(allCards), 
+        'category', 
+        'Number of cards grouped by number of repetitions')}
+      
+      
     </div>;
+
+    /**
+     * {chart_column(getFutureDueCards(allCards, daysOutlook), 'datetime', 'Cards Due', daysOutlook)}
+     * 
+     */
 }
 
-function getFutureDueCards(allCards) {
-  const daysOutlook = 30;
+/**
+ * 
+ * @param days number of days to look into the future
+ * @returns Unix timestamp for for the time in x days
+ */
+function getFutureUnixTimestamp(days: number) {
+  return new Date().getTime() + days * 24 * 60 * 60 * 1000;
+}
+
+function getFutureDueCards(allCards, daysOutlook: Number) {
+  
   var futureDueCards =  allCards?.filter((card) => card.nextRepetitionTime > Date.now());
 
   var futureDueDates = futureDueCards?.map((card) => new Date(card.nextRepetitionTime));
@@ -44,6 +85,8 @@ function getFutureDueCards(allCards) {
   //get a array with unix timestamps for the next 30 days and a value of 0
   const futureDueDatesGroupedByDayUnix = Array.from({length: daysOutlook}, (v, i) => [todayUnix + i * 24 * 60 * 60 * 1000, 0]);
 
+
+  
   for(let i = 0; i < data.length; i++) {
     for(let j = 0; j < futureDueDatesGroupedByDayUnix.length; j++) {
       if(data[i][0] === futureDueDatesGroupedByDayUnix[j][0]) {
@@ -53,31 +96,47 @@ function getFutureDueCards(allCards) {
   }
 
     
-  return data;
+  return futureDueDatesGroupedByDayUnix;
 
 }
 
-function chart_column(data: any[][]) {
+/**
+ * Renders a column chart with the given data
+ * @param data 
+ * @param xaxisType 
+ * @param title 
+ * @param xMax 
+ * @returns 
+ */
+function chart_column(data: any[][], xaxisType: String, title: String, xMax?: number) {
   const chart = {
     options: {
-      chart: {
-        type: 'bar'
-      },
       dataLabels: {
         enabled: false
       },
+      colors: chartColor,
       xaxis: {
-        type: 'datetime',
-        max: new Date().getTime() + 30 * 24 * 60 * 60 * 1000,
+        type: xaxisType,
+        tickAmount: 'dataPoints',
+        max: {xMax},
+        title: {
+          text: title
+        },
+        labels: {
+          show: true
+        }
+      },
+      yaxis: {
+        decimalsInFloat: 0,
       },
     },
     series: [{
-      name: 'Cards Due',
+      name: '',
       data: data
     }]
   }
 
-  return <div><div>Due in future:</div>
+  return <div><div></div>
   <Chart
     options={chart.options}
     type="bar"
@@ -86,6 +145,49 @@ function chart_column(data: any[][]) {
     series={chart.series}/></div>;
 }
 
+function getNumberRepetitionsGroupedByScore(allCards) {
+  var data = {"Skip": 0, "Forgot": 0, "Partially recalled": 0, "Recalled with effort": 0, "Easily recalled": 0};
+  for(let a in allCards) {
+    for(let r in allCards[a].repetitionHistory) {
+      let score = allCards[a].repetitionHistory[r].score;
+      switch(score) {
+        case 0: data["Skip"]++; break;
+        case 0.01: data["Forgot"]++; break;
+        case 0.5: data["Partially recalled"]++; break;
+        case 1: data["Recalled with effort"]++; break;
+        case 1.5: data["Easily recalled"]++; break;
+
+    }
+  }
+  }
+
+  return data;
+}
+
+/**
+ * Usefull for transforming an object to a format that can be used for a chart with a category x-axis
+ * @param data {a:b, c:d, e:f}
+ * @returns [{x:a, y:b}, {x:c, y:d}, {x:e, y:f}]
+ */
+function transformObjectToCategoryFormat(data) {
+  //convert to format [{x: "Skip", y: 0}, ...]
+  return Object.keys(data).map((key) => {
+    return {x: key, y: data[key]};
+  });
+}
+
+
+function retentionRate(data) {
+      var a = data["Forgot"] + data["Partially recalled"];
+      var b = data["Recalled with effort"] + data["Easily recalled"];
+
+      return (b/(a+b)).toFixed(2);
+}
+
+/**
+ * 
+ * @returns a line chart with the compounded number of repetitions in total
+ */
 function chart_repetionsCompounded() {
   var data = getRepetitionsPerDayObject();
   //sort the data by date
@@ -145,6 +247,10 @@ function chart_repetionsCompounded() {
   /></div>
 }
 
+/**
+ * 
+ * @returns all cards in the database
+ */
 function getAllCards() {
   const allCards: Card[] | undefined = useTracker(
     async (reactivePlugin) => await reactivePlugin.card.getAll()
@@ -152,6 +258,40 @@ function getAllCards() {
   return allCards;
 }
 
+/**
+ * @returns an array of objects with the format [{x: number of repetitions, y: number of cards}, {...}, ...]
+ */
+function getNumberCardsGroupedByRepetitions(allCards) {
+  
+
+  //remove all cards where repetitionHistory is undefined
+  const allCardsWithRepetitionHistory = allCards?.filter((card) => card.repetitionHistory !== undefined);
+
+  //get the number of repetitions for each card
+  const repetitionsPerCard = allCardsWithRepetitionHistory?.map(
+    (card) => card.repetitionHistory?.length
+    );
+  
+  //group the number of repetitions by the number of repetitions
+  const repetitionsGroupedByNumber = repetitionsPerCard?.reduce((r, a) => {
+    r[a] = ++r[a] || 1;
+    return r;
+  }, Object.create(Object));
+
+  //convert the object into an array of objects with the format {x: number of repetitions, y: number of cards}
+  const data = Object.keys(repetitionsGroupedByNumber || {}).map((key) => {
+    return {x: Number(key), y: repetitionsGroupedByNumber[key]};
+  });
+
+
+  return data;
+}
+
+
+/**
+ * 
+ * @returns an object with the number of repetitions per day
+ */
 function getRepetitionsPerDayObject () {
   
     const repetitionHistory = getAllCards()?.map((card) => card.repetitionHistory);

@@ -19,6 +19,14 @@ async function onActivate(plugin: ReactRNPlugin) {
       plugin.window.openWidgetInPane('statistics');
     },
   });
+
+  //register String setting 
+  await plugin.settings.registerStringSetting({
+    id: 'statistics-chart-color',
+    defaultValue: '#3362f0',
+    title: 'Chart Color',
+    description: 'Enter a valid hex color code for the charts (e.g. #3362f0). If you enter an invalid color, a default color will be used.',
+  });
 }
 
 async function onDeactivate(_: ReactRNPlugin) {}
