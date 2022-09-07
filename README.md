@@ -15,3 +15,12 @@ You costumize the color of the charts in the settings by giving a hex color code
 ## Additional information
 - The plugin is still in development and might not work as expected.
 - No dark mode support yet.
+
+## License 
+
+MIT License
+Copyright (c) 2022 Henrik Lammert
+
+### Logo 
+
+The logo falls under the Attribution 3.0 Unported (CC BY 3.0) license. The original logo can be found [here](https://www.iconfinder.com/icons/2921799/business_diagram_infographic_marketing_pie_chart_presentation_statistics_icon).
