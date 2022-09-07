@@ -48,7 +48,7 @@ export const Heatmap = () => {
     --- end ---
   */
 
-    return <div class="statisticsBody">
+    return <div class="heatmapBody">
         {renderHeatmap(categorizeDataByWeekday(fullArrayRepetitionsPerDay))}
         <p>Days learned: <b>{daysLearned}</b></p>
         <p>Daily average of reviews: <b>{dailyAverage}</b></p>
