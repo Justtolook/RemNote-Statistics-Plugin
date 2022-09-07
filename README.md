@@ -1,15 +1,19 @@
-# RemNote statistics Plugin
+# RemNote statistics plugin
 
 ## Features
 This plugin will give you the following statistics:
 - Retention rate
 - Number of cards due in future
 - Type of buttons you pressend in the queue (Skip, Forgot, Partially recalled, Recalled with effort, Easily recalled)
-- Number of cards grouped by the number of repetitions
-- Sum of repetitions over time
+- Number of cards grouped by the number of reviews
+- Sum of reviews over time
+- Number of days learned
+- Daily average of reviews
+- Longest streak of days learned
 
 ## How to use
 Use the slash command `/statistics` to get a summary of your RemNote statistics in a popup. Press ESC or click outside the popup to close it.
+Use the slash command `/heatmap` to get a heatmap of your reviews. Press ESC or click outside the popup to close it.
 You costumize the color of the charts in the settings by giving a hex color code.
 
 ## Additional information

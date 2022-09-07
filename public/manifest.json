@@ -9,7 +9,7 @@
     "minor": 0,
     "patch": 0
   },
-  "description": "",
+  "description": "Statistics plugin that will give you some helpful numbers, charts and heatmap for your knowledge base.",
   "requestNative": false,
   "enableOnMobile": false,
   "requiredScopes": [
