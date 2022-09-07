@@ -31,13 +31,13 @@ export const Statistics = () => {
       {chart_column(
         getFutureDueCards(allCards, daysOutlook), 
         'datetime', 
-        'Number of cards due in future', 
+        'Number of cards due in within the next ' + daysOutlook + ' days', 
         daysOutlook)}
 
       {chart_column(
         getNumberCardsGroupedByRepetitions(allCards), 
         'category', 
-        'Number of cards grouped by number of repetitions')}
+        'Number of cards grouped by number of reviews')}
 
       {chart_repetionsCompounded()}
       
@@ -212,7 +212,7 @@ function chart_repetionsCompounded() {
         tickPlacement: 'on',
       },
       title: {
-        text: 'Sum of repetitions over time'
+        text: 'Sum of reviews over time'
       },
       dataLabels: {
         enabled: false

@@ -44,7 +44,7 @@ body,
   -moz-osx-font-smoothing: grayscale;
 }
 
-.statisticsBody {
+.statisticsBody, .heatmapBody {
   padding: 2rem;
 }
 
