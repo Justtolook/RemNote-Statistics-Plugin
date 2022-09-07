@@ -6,48 +6,44 @@ var chartColor = '#3362f0';
 
 /* Functions */
 export const Statistics = () => {
-    const plugin = usePlugin();
-    const allCards = getAllCards();
-    const daysOutlook = 30;
+  const plugin = usePlugin();
+  const allCards = getAllCards();
+  var daysOutlook: Number = 30;
 
-    //check if color setting is a valid hex color (not case sensitive)
-    const chartColorSettings = useTracker(() => plugin.settings.getSetting('statistics-chart-color'));
-    if(/^#[0-9A-F]{6}$/i.test(chartColorSettings)) {
-      chartColor = chartColorSettings;
-    }
+  daysOutlook = useTracker(() => plugin.settings.getSetting('statistics-nDays-outlook'));
 
+  //check if color setting is a valid hex color (not case sensitive)
+  const chartColorSettings = useTracker(() => plugin.settings.getSetting('statistics-chart-color'));
+  if(/^#[0-9A-F]{6}$/i.test(chartColorSettings)) {
+    chartColor = chartColorSettings;
+  }
 
+  return <div class="statisticsBody">
+    <div><b>Retention rate: </b> {(retentionRate(getNumberRepetitionsGroupedByScore(allCards)))}</div>
+    <div class="vSpacing-1rem"/>
+    {chart_column(
+      transformObjectToCategoryFormat(getNumberRepetitionsGroupedByScore(allCards)), 
+      'category', 
+      'Buttons pressed', 
+      daysOutlook)}
+    
 
-    return <div class="statisticsBody">
-      <div><b>Retention rate: </b> {(retentionRate(getNumberRepetitionsGroupedByScore(allCards)))}</div>
-      <div class="vSpacing-1rem"/>
-      {chart_column(
-        transformObjectToCategoryFormat(getNumberRepetitionsGroupedByScore(allCards)), 
-        'category', 
-        'Buttons pressed', 
-        daysOutlook)}
-      
+    {chart_column(
+      getFutureDueCards(allCards, daysOutlook), 
+      'datetime', 
+      'Number of cards due in within the next ' + daysOutlook + ' days', 
+      daysOutlook)}
 
-      {chart_column(
-        getFutureDueCards(allCards, daysOutlook), 
-        'datetime', 
-        'Number of cards due in within the next ' + daysOutlook + ' days', 
-        daysOutlook)}
+    {chart_column(
+      getNumberCardsGroupedByRepetitions(allCards), 
+      'category', 
+      'Number of cards grouped by number of reviews')}
 
-      {chart_column(
-        getNumberCardsGroupedByRepetitions(allCards), 
-        'category', 
-        'Number of cards grouped by number of reviews')}
+    {chart_repetionsCompounded()}
+    
+    
+  </div>;
 
-      {chart_repetionsCompounded()}
-      
-      
-    </div>;
-
-    /**
-     * {chart_column(getFutureDueCards(allCards, daysOutlook), 'datetime', 'Cards Due', daysOutlook)}
-     * 
-     */
 }
 
 /**
@@ -59,6 +55,12 @@ function getFutureUnixTimestamp(days: number) {
   return new Date().getTime() + days * 24 * 60 * 60 * 1000;
 }
 
+/**
+ * 
+ * @param allCards 
+ * @param daysOutlook (Number of days to look into the future)
+ * @returns a two dimensional array with the number of cards due in the next x days [[date (unix timestamp), number of cards], ...]
+ */
 function getFutureDueCards(allCards, daysOutlook: Number) {
   
   var futureDueCards =  allCards?.filter((card) => card.nextRepetitionTime > Date.now());
@@ -84,7 +86,7 @@ function getFutureDueCards(allCards, daysOutlook: Number) {
   today.setHours(0,0,0,0);
   const todayUnix = Number(today.getTime());
 
-  //get a array with unix timestamps for the next 30 days and a value of 0
+  //get a array with unix timestamps for the next x days and a value of 0
   const futureDueDatesGroupedByDayUnix = Array.from({length: daysOutlook}, (v, i) => [todayUnix + i * 24 * 60 * 60 * 1000, 0]);
 
 

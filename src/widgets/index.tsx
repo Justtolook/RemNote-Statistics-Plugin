@@ -31,6 +31,12 @@ async function onActivate(plugin: ReactRNPlugin) {
     description: 'Enter a valid hex color code for the charts (e.g. #3362f0). If you enter an invalid color, a default color will be used.',
   });
 
+  await plugin.settings.registerNumberSetting({
+    id: 'statistics-nDays-outlook',
+    title: 'Number of days to look into the future for due cards',
+    defaultValue: 30,
+  });
+
   // --- Heatmap Widget ---
 
   //Register heatmap widget
