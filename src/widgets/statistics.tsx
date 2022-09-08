@@ -18,7 +18,7 @@ export const Statistics = () => {
     chartColor = chartColorSettings;
   }
 
-  return <div class="statisticsBody">
+  return <div style={{ maxHeight: "calc(90vh)" }} class="statisticsBody overflow-y-auto">
     <div><b>Retention rate: </b> {(retentionRate(getNumberRepetitionsGroupedByScore(allCards)))}</div>
     <div class="vSpacing-1rem"/>
     {chart_column(
