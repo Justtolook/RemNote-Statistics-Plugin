@@ -7,6 +7,7 @@ const DEFAULT_heatmapColorNormal = '#3362f0';
 var heatmapColorLow: string;
 var heatmapColorNormal: string;
 var heatmapLowUpperBound: number;
+const LIMIT = 1483225200000; // 1.1.2017 (unix timestamp in ms ex)
 
 export const Heatmap = () => {
   const plugin = usePlugin();
@@ -209,7 +210,9 @@ function getRepetitionsPerDayObject (allCards) {
   
     //remove all NaN values from repetitionHistoryDatesFlatSortedDates
     repetitionHistoryDates = repetitionHistoryDates?.filter((date) => !isNaN(date.getTime()));
-  
+
+    //remove all dates before the limit
+    repetitionHistoryDates = repetitionHistoryDates?.filter((date) => date.getTime() > LIMIT);
   
     //group dates by day and count the number of repetitions per day
     const repetitionHistoryDatesFlatSortedDatesGroupedByDay = repetitionHistoryDates?.reduce((r, a) => {
