@@ -6,8 +6,8 @@
   "repoUrl": "https://github.com/Justtolook/RemNote-Statistics-Plugin",
   "version": {
     "major": 1,
-    "minor": 1,
-    "patch": 3
+    "minor": 2,
+    "patch": 0
   },
   "description": "Statistics plugin that will give you some helpful numbers, charts and heatmap for your knowledge base.",
   "requestNative": false,
