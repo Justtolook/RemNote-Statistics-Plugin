@@ -7,7 +7,9 @@ var chartColor = '#3362f0';
 /* Functions */
 export const Statistics = () => {
   const plugin = usePlugin();
-  const allCards = getAllCards();
+  var allCards;
+  var allRemsInContext;
+  var allCardsInContext;
   var daysOutlook: Number = 30;
 
   /**
@@ -18,6 +20,41 @@ export const Statistics = () => {
     return ctx?.focusedRemId;
   }, []);
 
+  /**
+   * get the rem of the contextRemId
+   */
+  const contextRem = useRunAsync(async () => {
+    return await plugin.rem.findOne(contextRemId);
+  }, [contextRemId]);
+  
+  allRemsInContext = useRunAsync(async () => {
+    //check if contextRem is of type Rem
+    console.log("contextRem", contextRem);
+    return await contextRem?.getDescendants();
+  }, [contextRem]);
+
+
+
+  /**
+   * get all Cards from allRemsInContext, resolve the promises and store them in allCards
+   */
+  allCards = useRunAsync(async () => {
+    const result = [];
+    for (const rem of allRemsInContext || []) {
+      result.push(...(await rem.getCards()));
+    }
+    return result;
+  }, [allRemsInContext]);
+  
+
+  
+
+  //resolve Promise of x
+  //console.log(allCards);
+
+
+
+
   daysOutlook = useTracker(() => plugin.settings.getSetting('statistics-nDays-outlook'));
 
   //check if color setting is a valid hex color (not case sensitive)
@@ -27,7 +64,7 @@ export const Statistics = () => {
   }
 
   return <div style={{ maxHeight: "calc(90vh)" }} class="statisticsBody overflow-y-auto">
-    <div><b>focusedRemId:</b> {contextRemId}</div>
+    <div><b>Context: </b> {contextRem?.text}</div>
     <div><b>Retention rate: </b> {(retentionRate(getNumberRepetitionsGroupedByScore(allCards)))}</div>
     <div class="vSpacing-1rem"/>
     {chart_column(
@@ -48,11 +85,16 @@ export const Statistics = () => {
       'category', 
       'Number of cards grouped by number of reviews')}
 
-    {chart_repetionsCompounded()}
+    {chart_repetionsCompounded(allCards)}
     
     
   </div>;
 
+}
+
+function getAllCardsInContext(contextRem : Rem | undefined) {
+  console.log("getAllCardsInContext");
+  return contextRem?.getDescendants();
 }
 
 /**
@@ -159,8 +201,10 @@ function chart_column(data: any[][], xaxisType: String, title: String, xMax?: nu
 }
 
 function getNumberRepetitionsGroupedByScore(allCards) {
+  console.log(allCards);
   var data = {"Skip": 0, "Forgot": 0, "Partially recalled": 0, "Recalled with effort": 0, "Easily recalled": 0};
   for(let a in allCards) {
+    
     for(let r in allCards[a].repetitionHistory) {
       let score = allCards[a].repetitionHistory[r].score;
       switch(score) {
@@ -191,18 +235,19 @@ function transformObjectToCategoryFormat(data) {
 
 
 function retentionRate(data) {
-      var a = data["Forgot"] + data["Partially recalled"];
-      var b = data["Recalled with effort"] + data["Easily recalled"];
+  console.log(data);
+  var a = data["Forgot"] + data["Partially recalled"];
+  var b = data["Recalled with effort"] + data["Easily recalled"];
 
-      return (b/(a+b)).toFixed(2);
+  return (b/(a+b)).toFixed(2);
 }
 
 /**
  * 
  * @returns a line chart with the compounded number of repetitions in total
  */
-function chart_repetionsCompounded() {
-  var data = getRepetitionsPerDayObject();
+function chart_repetionsCompounded(allCards) {
+  var data = getRepetitionsPerDayObject(allCards);
   //sort the data by date
   data = data?.sort((a,b) => a.date - b.date);
 
@@ -307,9 +352,9 @@ function getNumberCardsGroupedByRepetitions(allCards) {
  * 
  * @returns an object with the number of repetitions per day
  */
-function getRepetitionsPerDayObject () {
+function getRepetitionsPerDayObject (allCards) {
   
-    const repetitionHistory = getAllCards()?.map((card) => card.repetitionHistory);
+    const repetitionHistory = allCards?.map((card) => card.repetitionHistory);
   
     var repetitionHistoryDates = repetitionHistory?.map((repetition) => repetition?.map((repetition) => repetition.date));
   
