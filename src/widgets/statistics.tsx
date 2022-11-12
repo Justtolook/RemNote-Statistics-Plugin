@@ -11,6 +11,9 @@ export const Statistics = () => {
   var allRemsInContext;
   var allCardsInContext;
   var daysOutlook: Number = 30;
+  var context = useTracker (() => plugin.settings.getSetting('statistics-context'));
+
+  allCards = getAllCards();
 
   /**
    * get the rem id of the widget context
@@ -28,8 +31,6 @@ export const Statistics = () => {
   }, [contextRemId]);
   
   allRemsInContext = useRunAsync(async () => {
-    //check if contextRem is of type Rem
-    console.log("contextRem", contextRem);
     return await contextRem?.getDescendants();
   }, [contextRem]);
 
@@ -38,19 +39,15 @@ export const Statistics = () => {
   /**
    * get all Cards from allRemsInContext, resolve the promises and store them in allCards
    */
-  allCards = useRunAsync(async () => {
+    allCardsInContext = useRunAsync(async () => {
     const result = [];
     for (const rem of allRemsInContext || []) {
       result.push(...(await rem.getCards()));
     }
     return result;
   }, [allRemsInContext]);
-  
 
-  
-
-  //resolve Promise of x
-  //console.log(allCards);
+  if(context == "Current Rem") allCards = allCardsInContext; 
 
 
 
@@ -64,7 +61,7 @@ export const Statistics = () => {
   }
 
   return <div style={{ maxHeight: "calc(90vh)" }} class="statisticsBody overflow-y-auto">
-    <div><b>Context: </b> {contextRem?.text}</div>
+    <div><b>Context: </b> {context}</div>
     <div><b>Retention rate: </b> {(retentionRate(getNumberRepetitionsGroupedByScore(allCards)))}</div>
     <div class="vSpacing-1rem"/>
     {chart_column(
@@ -93,7 +90,6 @@ export const Statistics = () => {
 }
 
 function getAllCardsInContext(contextRem : Rem | undefined) {
-  console.log("getAllCardsInContext");
   return contextRem?.getDescendants();
 }
 
@@ -201,7 +197,6 @@ function chart_column(data: any[][], xaxisType: String, title: String, xMax?: nu
 }
 
 function getNumberRepetitionsGroupedByScore(allCards) {
-  console.log(allCards);
   var data = {"Skip": 0, "Forgot": 0, "Partially recalled": 0, "Recalled with effort": 0, "Easily recalled": 0};
   for(let a in allCards) {
     
@@ -235,7 +230,6 @@ function transformObjectToCategoryFormat(data) {
 
 
 function retentionRate(data) {
-  console.log(data);
   var a = data["Forgot"] + data["Partially recalled"];
   var b = data["Recalled with effort"] + data["Easily recalled"];
 

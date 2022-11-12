@@ -37,6 +37,24 @@ async function onActivate(plugin: ReactRNPlugin) {
     defaultValue: 30,
   });
 
+  await plugin.settings.registerDropdownSetting({
+    id: 'statistics-context',
+    title: 'Context',
+    defaultValue: 'Global',
+    options: [
+      {
+        key: "0",
+        value: "Global",
+        label: "Global",
+      },
+      {
+        key: "1",
+        value: "Current Rem",
+        label: "Current Rem",
+      }
+    ]
+  });
+
   // --- Heatmap Widget ---
 
   //Register heatmap widget
