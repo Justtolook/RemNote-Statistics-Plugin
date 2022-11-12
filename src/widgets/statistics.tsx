@@ -1,4 +1,4 @@
-import { usePlugin, renderWidget, useTracker, Card, CardNamespace, Rem, useRunAsync } from '@remnote/plugin-sdk';
+import { usePlugin, renderWidget, useTracker, Card, CardNamespace, Rem, useRunAsync, WidgetLocation } from '@remnote/plugin-sdk';
 import Chart from 'react-apexcharts';
 
 /* Constants */
@@ -10,6 +10,14 @@ export const Statistics = () => {
   const allCards = getAllCards();
   var daysOutlook: Number = 30;
 
+  /**
+   * get the rem id of the widget context
+   */
+  const contextRemId = useRunAsync(async () => {
+    const ctx = await plugin.widget.getWidgetContext<WidgetLocation.Popup>();
+    return ctx?.focusedRemId;
+  }, []);
+
   daysOutlook = useTracker(() => plugin.settings.getSetting('statistics-nDays-outlook'));
 
   //check if color setting is a valid hex color (not case sensitive)
@@ -19,6 +27,7 @@ export const Statistics = () => {
   }
 
   return <div style={{ maxHeight: "calc(90vh)" }} class="statisticsBody overflow-y-auto">
+    <div><b>focusedRemId:</b> {contextRemId}</div>
     <div><b>Retention rate: </b> {(retentionRate(getNumberRepetitionsGroupedByScore(allCards)))}</div>
     <div class="vSpacing-1rem"/>
     {chart_column(
