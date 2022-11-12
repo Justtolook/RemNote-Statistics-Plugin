@@ -10,6 +10,7 @@ This plugin will give you the following statistics:
 - Number of days learned
 - Daily average of reviews
 - Longest streak of days learned
+- [NEW] Ability to set the context for the statistics and heatmap to the current rem (in settings)
 
 ## How to use
 Use the slash command `/statistics` to get a summary of your RemNote statistics in a popup. Press ESC or click outside the popup to close it.
