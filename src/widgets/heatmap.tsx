@@ -11,7 +11,10 @@ const LIMIT = 1483225200000; // 1.1.2017 (unix timestamp in ms ex)
 
 export const Heatmap = () => {
   const plugin = usePlugin();
-
+  
+  var allRemsInContext;
+  var allCardsInContext;
+  var context = useTracker (() => plugin.settings.getSetting('statistics-context'));
   heatmapColorLow = useTracker(() => plugin.settings.getSetting('HeatmapColorLow'));
   heatmapColorNormal = useTracker(() => plugin.settings.getSetting('HeatmapColorNormal'));
   heatmapLowUpperBound = useTracker(() => plugin.settings.getSetting('HeatmapLowUpperBound'));
@@ -22,9 +25,45 @@ export const Heatmap = () => {
   if (!/^#[0-9A-F]{6}$/i.test(heatmapColorNormal)) {
     heatmapColorNormal = DEFAULT_heatmapColorNormal;
   }
-  const allCards: Card[] | undefined = useTracker(
+  var allCards: Card[] | undefined = useTracker(
     async (reactivePlugin) => await reactivePlugin.card.getAll()
   );
+
+  /**
+   * get the rem id of the widget context
+   */
+   const contextRemId = useRunAsync(async () => {
+    const ctx = await plugin.widget.getWidgetContext<WidgetLocation.Popup>();
+    return ctx?.focusedRemId;
+  }, []);
+
+  /**
+   * get the rem of the contextRemId
+   */
+  const contextRem = useRunAsync(async () => {
+    return await plugin.rem.findOne(contextRemId);
+  }, [contextRemId]);
+  
+  allRemsInContext = useRunAsync(async () => {
+    return await contextRem?.getDescendants();
+  }, [contextRem]);
+
+
+
+  /**
+   * get all Cards from allRemsInContext, resolve the promises and store them in allCards
+   */
+    allCardsInContext = useRunAsync(async () => {
+    const result = [];
+    for (const rem of allRemsInContext || []) {
+      result.push(...(await rem.getCards()));
+    }
+    return result;
+  }, [allRemsInContext]);
+
+  if(context == "Current Rem") allCards = allCardsInContext; 
+
+
   const repetitionsPerDay = getRepetitionsPerDayObject(allCards);
   const daysLearned = repetitionsPerDay.length;
   var fullArrayRepetitionsPerDay = getFullArrayRepetitionsPerDay(getRepetitionsPerDayObject(allCards));
@@ -50,6 +89,7 @@ export const Heatmap = () => {
   */
 
     return <div class="heatmapBody">
+        <div><b>Context: </b>{context}</div>
         {renderHeatmap(categorizeDataByWeekday(fullArrayRepetitionsPerDay))}
         <p>Days learned: <b>{daysLearned}</b></p>
         <p>Daily average of reviews: <b>{dailyAverage}</b></p>
