@@ -37,6 +37,12 @@ async function onActivate(plugin: ReactRNPlugin) {
     defaultValue: 30,
   });
 
+  await plugin.settings.registerNumberSetting({
+    id: 'statistics-nDays-past',
+    title: 'Number of days to look into the past for due cards',
+    defaultValue: -10,
+  });
+
   await plugin.settings.registerDropdownSetting({
     id: 'statistics-context',
     title: 'Context',

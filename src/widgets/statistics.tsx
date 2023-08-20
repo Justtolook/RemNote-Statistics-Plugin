@@ -11,6 +11,7 @@ export const Statistics = () => {
   var allRemsInContext;
   var allCardsInContext;
   var daysOutlook: Number = 30;
+  var daysPast: Number = -10;
   var context = useTracker (() => plugin.settings.getSetting('statistics-context'));
 
   allCards = getAllCards();
@@ -53,6 +54,7 @@ export const Statistics = () => {
 
 
   daysOutlook = useTracker(() => plugin.settings.getSetting('statistics-nDays-outlook'));
+  daysPast = useTracker(() => plugin.settings.getSetting('statistics-nDays-past'));
 
   //check if color setting is a valid hex color (not case sensitive)
   const chartColorSettings = useTracker(() => plugin.settings.getSetting('statistics-chart-color'));
@@ -60,10 +62,19 @@ export const Statistics = () => {
     chartColor = chartColorSettings;
   }
 
-  return <div style={{ maxHeight: "calc(90vh)" }} class="statisticsBody overflow-y-auto">
+  //getFutureDueCardsGroupedByDayAndScore(allCards, daysOutlook);
+
+  return <div style={{ maxHeight: "calc(90vh)" }} className="statisticsBody overflow-y-auto">
     <div><b>Context: </b> {context}</div>
     <div><b>Retention rate: </b> {(retentionRate(getNumberRepetitionsGroupedByScore(allCards)))}</div>
-    <div class="vSpacing-1rem"/>
+    <div className="vSpacing-1rem"/>
+    {chart_column_stacked(
+      getFutureDueCardsGroupedByDayAndScore(allCards, daysPast, daysOutlook),
+      createUnixTimeSeries(daysPast, daysOutlook),
+      'datetime',
+      'Number of cards due in within the next ' + daysOutlook + ' days by score',
+      daysOutlook)}
+
     {chart_column(
       transformObjectToCategoryFormat(getNumberRepetitionsGroupedByScore(allCards)), 
       'category', 
@@ -152,6 +163,122 @@ function getFutureDueCards(allCards, daysOutlook: Number) {
 }
 
 /**
+ * count the number of cards due in the next x days per day and group them by the last score (use getNumberRepetitionsGroupedByScore()). The output should be ready to be used by chart_column_stacked()
+ * @param allCards
+ * @param daysOutlook
+ */
+function getFutureDueCardsGroupedByDayAndScore(allCards, daysPast: Number, daysOutlook: Number) {
+  var futureDueCards =  allCards?.filter((card) => card.nextRepetitionTime > Date.now());
+
+  //create a new array with the format [[date (unix timestamp), score], ...]
+  var futureDueCardsWithScore = futureDueCards?.map((card) => [new Date(card.nextRepetitionTime), card.repetitionHistory[card.repetitionHistory.length - 1].score]);
+
+  
+  //group futureDueCardsWithScore by score
+  const futureDueCardsWithScoreGroupedByScore = futureDueCardsWithScore?.reduce((r, a) => {
+    r[a[1]] = ++r[a[1]] || 1;
+    return r;
+  }, Object.create(Object));
+
+  //for each score, group the dates by day and count the number of repetitions per day
+  const futureDueCardsWithScoreGroupedByScoreGroupedByDay = Object.keys(futureDueCardsWithScoreGroupedByScore || {}).map((key) => {
+    return {
+      score: key,
+      data: futureDueCardsWithScore?.filter((card) => card[1] === Number(key)).reduce((r, a) => {
+        r[a[0].toDateString()] = ++r[a[0].toDateString()] || 1;
+        return r;
+      }, Object.create(Object))
+    }
+  });
+
+  //convert futureDueCardsWithScoreGroupedByScoreGroupedByDay's keys into Unix timestamps and store them in an object
+  const data = futureDueCardsWithScoreGroupedByScoreGroupedByDay.map((scoreGroup) => {
+    return {
+      score: scoreGroup.score,
+      data: Object.keys(scoreGroup.data ||{}).map((key) => {
+        return {
+          date: new Date(key).getTime(),
+          repetitions: scoreGroup.data[key]
+        }
+      })
+    }
+  });
+
+  //sort the data by date
+  data.forEach((scoreGroup) => {
+    scoreGroup.data.sort((a,b) => a.date - b.date);
+  });
+
+  //get the unix timestamps for the start of this day
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const todayUnix = Number(today.getTime());
+
+  //bring the data on an equal timeline
+  data.forEach((scoreGroup) => {
+    //get a array with unix timestamps for the next x days and a value of 0
+    const futureDueDatesGroupedByDayUnix = createUnixTimeSeries(daysPast, daysOutlook).map((day) => [day, 0]);
+
+
+
+    
+    for(let i = 0; i < scoreGroup.data.length; i++) {
+      for(let j = 0; j < futureDueDatesGroupedByDayUnix.length; j++) {
+        if(scoreGroup.data[i].date === futureDueDatesGroupedByDayUnix[j][0]) {
+          futureDueDatesGroupedByDayUnix[j][1] = scoreGroup.data[i].repetitions;
+        }
+      }
+    }
+    
+
+
+    scoreGroup.data = futureDueDatesGroupedByDayUnix;
+  });  
+
+  //convert data i.e. [score, [number of repetitions day 0, ...]]
+  data.forEach((scoreGroup) => {
+    scoreGroup.data = scoreGroup.data.map((day) => day[1]);
+  });
+
+  //rename score e.g., 0.01 -> Skip
+  data.forEach((scoreGroup) => {
+    switch(scoreGroup.score) {
+      case '0': scoreGroup.score = "Forgot"; break;
+      case '0.01': scoreGroup.score = "Skip"; break;
+      case '0.5': scoreGroup.score = "Partially recalled"; break;
+      case '1': scoreGroup.score = "Recalled with effort"; break;
+      case '1.5': scoreGroup.score = "Easily recalled"; break;
+    }
+  });
+  
+
+  console.log("data");
+  console.log(data);
+  return data;
+}
+
+
+/**
+ * create an unix time series from start to end with a day as an interval stored in an array
+ * @param start (days relative to today)
+ * @param end (days relative to today)
+ */
+function createUnixTimeSeries(start: Number, end: Number) {
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const todayUnix = Number(today.getTime());
+
+  //get a array with unix timestamps for the next x days
+  const futureDueDatesGroupedByDayUnix = Array.from({length: end - start}, (v, i) => todayUnix + (i + start) * 24 * 60 * 60 * 1000);
+  console.log(futureDueDatesGroupedByDayUnix);
+  return futureDueDatesGroupedByDayUnix;
+}
+
+
+
+
+
+/**
  * Renders a column chart with the given data
  * @param data 
  * @param xaxisType 
@@ -203,8 +330,8 @@ function getNumberRepetitionsGroupedByScore(allCards) {
     for(let r in allCards[a].repetitionHistory) {
       let score = allCards[a].repetitionHistory[r].score;
       switch(score) {
-        case 0: data["Skip"]++; break;
-        case 0.01: data["Forgot"]++; break;
+        case 0: data["Forgot"]++; break;
+        case 0.01: data["Skip"]++; break;
         case 0.5: data["Partially recalled"]++; break;
         case 1: data["Recalled with effort"]++; break;
         case 1.5: data["Easily recalled"]++; break;
@@ -215,6 +342,80 @@ function getNumberRepetitionsGroupedByScore(allCards) {
 
   return data;
 }
+
+import ApexChart from 'react-apexcharts';
+
+/**
+ * Renders a stacked column chart to show the number of due repetitions per day for the next x days by score based on the data from getFutureDueCardsGroupedByDayAndScore()
+ * @param data 
+ * @param xaxisType 
+ * @param title 
+ * @param xMax 
+ * @returns 
+ */
+function chart_column_stacked(data: any[][], categories: any[], xaxisType: String, title: String, xMax?: number) {
+  const chart = {
+    options: {
+      chart: {
+        stacked: true,
+      },
+      responsive: [{
+        breakpoint: 480,
+        options: {
+          legend: {
+            position: 'bottom',
+            offsetX: -10,
+            offsetY: 0
+          }
+        }
+      }],
+      dataLabels: {
+        enabled: false,
+        total: {
+          enabled: true,
+          style: {
+            fontSize: '13px',
+            fontWeight: 600,
+          }
+        }
+      },
+      title: {
+        text: title,
+      },
+      xaxis: {
+        type: xaxisType,
+        categories: categories,
+        labels: {
+          show: true
+        }
+      },
+      yaxis: {
+        decimalsInFloat: 0,
+      },
+    },
+    series:
+    data.map((scoreGroup) => {
+      return {
+        name: scoreGroup.score,
+        data: scoreGroup.data
+      }
+    }) 
+  }
+
+  return (
+    <div>
+      <Chart
+        options={chart.options}
+        type="bar"
+        width="600"
+        height="200"
+        series={chart.series}
+      />
+    </div>
+  );
+}
+
+
 
 /**
  * Usefull for transforming an object to a format that can be used for a chart with a category x-axis
