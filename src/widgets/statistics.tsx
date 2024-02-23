@@ -14,7 +14,9 @@ export const Statistics = () => {
   var daysPast: Number = -10;
   var context = useTracker (() => plugin.settings.getSetting('statistics-context'));
 
+
   allCards = getAllCards();
+
 
   /**
    * get the rem id of the widget context
@@ -68,12 +70,14 @@ export const Statistics = () => {
     <div><b>Context: </b> {context}</div>
     <div><b>Retention rate: </b> {(retentionRate(getNumberRepetitionsGroupedByScore(allCards)))}</div>
     <div className="vSpacing-1rem"/>
+    {console.time("getFutureDueCardsGroupedByDayAndScore")}
     {chart_column_stacked(
       getFutureDueCardsGroupedByDayAndScore(allCards, daysPast, daysOutlook),
       createUnixTimeSeries(daysPast, daysOutlook),
       'datetime',
       'Number of cards due in within the next ' + daysOutlook + ' days by score',
       daysOutlook)}
+    {console.timeEnd("getFutureDueCardsGroupedByDayAndScore")}
 
     {chart_column(
       transformObjectToCategoryFormat(getNumberRepetitionsGroupedByScore(allCards)), 
@@ -168,10 +172,12 @@ function getFutureDueCards(allCards, daysOutlook: Number) {
  * @param daysOutlook
  */
 function getFutureDueCardsGroupedByDayAndScore(allCards, daysPast: Number, daysOutlook: Number) {
-  var futureDueCards =  allCards?.filter((card) => card.nextRepetitionTime > Date.now());
+  //console.time("getFutureDueCardsGroupedByDayAndScore");
+  let unixPast = getFutureUnixTimestamp(daysPast); 
+  var cards =  allCards?.filter((card) => card.nextRepetitionTime > unixPast);
 
   //create a new array with the format [[date (unix timestamp), score], ...]
-  var futureDueCardsWithScore = futureDueCards?.map((card) => [new Date(card.nextRepetitionTime), card.repetitionHistory[card.repetitionHistory.length - 1].score]);
+  var futureDueCardsWithScore = cards?.map((card) => [new Date(card.nextRepetitionTime), card.repetitionHistory[card.repetitionHistory.length - 1].score]);
 
   
   //group futureDueCardsWithScore by score
@@ -251,10 +257,48 @@ function getFutureDueCardsGroupedByDayAndScore(allCards, daysPast: Number, daysO
     }
   });
   
-
-  console.log("data");
-  console.log(data);
+  //console.timeEnd("getFutureDueCardsGroupedByDayAndScore");
   return data;
+}
+
+
+function getFutureDueCardsGroupedByDayAndScore2(allCards, daysPast: Number, daysOutlook: Number) {
+  let unixPast = getFutureUnixTimestamp(daysPast); 
+  var cards =  allCards?.filter((card) => card.nextRepetitionTime > unixPast);
+
+  //create a new array with the format [[date (unix timestamp), score], ...]
+  var futureDueCardsWithScore = cards?.map((card) => [new Date(card.nextRepetitionTime), card.repetitionHistory[card.repetitionHistory.length - 1].score]);
+
+  //create a new blank object with the format {scoreName, [date, number of repetitions], ...}
+  var dataGrouped: any[] = [
+    {score: "Forgot", data: []},
+    {score: "Skip", data: []},
+    {score: "Partially recalled", data: []},
+    {score: "Recalled with effort", data: []},
+    {score: "Easily recalled", data: []}
+  ];
+
+  //get a array with unix timestamps for the next x days and a value of 0
+  const timeSeries = createUnixTimeSeries(daysPast, daysOutlook).map((day) => [day, 0]);
+
+  //copy the timeSeries into each data object
+  dataGrouped.forEach((scoreGroup) => {
+    scoreGroup.data = timeSeries;
+  });
+
+  //iterate over the last repetition of all cards and add the number of repetitions to the corresponding data object and day
+  futureDueCardsWithScore?.forEach((card) => {
+    switch(card[1]) {
+      case '0': dataGrouped[0].data.forEach((day) => {if(day[0] === card[0].getTime()) day[1]++}); break;
+      case '0.01': dataGrouped[1].data.forEach((day) => {if(day[0] === card[0].getTime()) day[1]++}); break;
+      case '0.5': dataGrouped[2].data.forEach((day) => {if(day[0] === card[0].getTime()) day[1]++}); break;
+      case '1': dataGrouped[3].data.forEach((day) => {if(day[0] === card[0].getTime()) day[1]++}); break;
+      case '1.5': dataGrouped[4].data.forEach((day) => {if(day[0] === card[0].getTime()) day[1]++}); break;
+    }
+  }
+  );
+
+  return dataGrouped;
 }
 
 
@@ -264,13 +308,14 @@ function getFutureDueCardsGroupedByDayAndScore(allCards, daysPast: Number, daysO
  * @param end (days relative to today)
  */
 function createUnixTimeSeries(start: Number, end: Number) {
+  console.time("createUnixTimeSeries");
   const today = new Date();
   today.setHours(0,0,0,0);
   const todayUnix = Number(today.getTime());
 
   //get a array with unix timestamps for the next x days
   const futureDueDatesGroupedByDayUnix = Array.from({length: end - start}, (v, i) => todayUnix + (i + start) * 24 * 60 * 60 * 1000);
-  console.log(futureDueDatesGroupedByDayUnix);
+  console.timeEnd("createUnixTimeSeries");
   return futureDueDatesGroupedByDayUnix;
 }
 

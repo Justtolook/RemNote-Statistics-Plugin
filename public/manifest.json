@@ -1,9 +1,12 @@
 {
-  "manifestVersion": 1,
   "id": "statistics",
+  "manifestVersion": 2,
   "name": "Statistics",
   "author": "henrik",
   "repoUrl": "https://github.com/Justtolook/RemNote-Statistics-Plugin",
+  "projectUrl": "",
+  "supportUrl": "",
+  "changelogUrl": "",
   "version": {
     "major": 2,
     "minor": 0,
