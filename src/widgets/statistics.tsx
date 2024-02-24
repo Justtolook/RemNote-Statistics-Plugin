@@ -1,7 +1,7 @@
 import { usePlugin, renderWidget, useTracker, Card, CardNamespace, Rem, useRunAsync, WidgetLocation } from '@remnote/plugin-sdk';
 import React, { useState, useMemo } from 'react';
 import * as d3 from "d3";
-import { LineChart, Line, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Bar, ComposedChart } from 'recharts';
+import { LineChart, Line, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Bar, ComposedChart, Area } from 'recharts';
 import DatePicker, { registerLocale, setDefaultLocale }  from 'react-datepicker';
 import de from 'date-fns/locale/de';
 registerLocale('de', de)
@@ -24,6 +24,9 @@ export const Statistics = () => {
   var context = useTracker (() => plugin.settings.getSetting('statistics-context'));
   const [startDate, setStartDate] = useState(new Date(Date.now() - 60 * 24 * 60 * 60 * 1000));
   const [endDate, setEndDate] = useState(new Date());
+  const [showRepetitions, setShowRepetitions] = useState(true);
+  const [showMovingAverage, setShowMovingAverage] = useState(true);
+  const [showAccumulatedRepetitions, setShowAccumulatedRepetitions] = useState(true);
 
 
   allCards = getAllCards();
@@ -79,26 +82,6 @@ export const Statistics = () => {
 
 
 
-  const renderTotalRepetitions = (
-    <LineChart
-          width={500}
-          height={300}
-          data={getRepetitionsPerDayObject(allCards)}
-          margin={{
-            top: 5,
-            right: 30,
-            left: 20,
-            bottom: 5,
-          }}
-        >
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="date" scale="time" type="number" domain={['auto', 'auto']} tickFormatter={(unixTime) => d3.timeFormat('%Y-%m-%d')(new Date(unixTime))} />
-          <YAxis />
-          <Tooltip labelFormatter={(unixTime) => d3.timeFormat('%Y-%m-%d')(new Date(unixTime))}/>
-          <Legend />
-          <Line type="monotone" dataKey="repetitions" stroke="#8884d8" activeDot={{ r: 8 }} />
-        </LineChart>
-  )
 
   const filteredData = useMemo(() => {
     if (!startDate || !endDate) {
@@ -126,7 +109,7 @@ export const Statistics = () => {
         movingAverage.push({
           date: data[i].date,
           repetitions: data[i].repetitions,
-          movingAverage: sum / (i + 1)
+          movingAverage: Math.round(sum / (i + 1))
         });
         continue;
       }
@@ -135,16 +118,48 @@ export const Statistics = () => {
       movingAverage.push({
         date: data[i].date,
         repetitions: data[i].repetitions,
-        movingAverage: sum / window
+        movingAverage: Math.round(sum / window)
       });
     }
 
     return movingAverage;
   }
 
+  const calculateAccumulatedRepetitions = (data) => {
+    const accumulatedRepetitions = [];
+
+    for (let i = 0; i < data.length; i++) {
+      if (i === 0) {
+        accumulatedRepetitions.push({
+          date: data[i].date,
+          repetitions: data[i].repetitions,
+          accumulatedRepetitions: data[i].repetitions
+        });
+        continue;
+      }
+
+      accumulatedRepetitions.push({
+        date: data[i].date,
+        repetitions: data[i].repetitions,
+        accumulatedRepetitions: data[i].repetitions + accumulatedRepetitions[i - 1].accumulatedRepetitions
+      });
+    }
+
+    return accumulatedRepetitions;
+  }
+
 
   const dataWithMovingAverage = calculateMovingAverage(filteredData);
   
+  //join accumulatedRepetitions with the dataWithMovingAverage Object
+  const dataObject = dataWithMovingAverage.map((item, index) => {
+    return {
+      ...item,
+      accumulatedRepetitions: calculateAccumulatedRepetitions(filteredData)[index].accumulatedRepetitions
+    }
+  });
+  
+
 
 
   return (
@@ -156,11 +171,28 @@ export const Statistics = () => {
       <DatePicker locale="de" selected={startDate} onChange={date => setStartDate(date)} />
       <DatePicker locale="de" selected={endDate} onChange={date => setEndDate(date)} />
 
+      <div className="vSpacing-1rem"/>
 
+      <label>
+      <input type="checkbox" checked={showRepetitions} onChange={(e) => setShowRepetitions(e.target.checked)} />
+      Show Repetitions
+      </label>
+
+      <label>
+        <input type="checkbox" checked={showMovingAverage} onChange={(e) => setShowMovingAverage(e.target.checked)} />
+        Show Moving Average
+      </label>
+
+      <label>
+        <input type="checkbox" checked={showAccumulatedRepetitions} onChange={(e) => setShowAccumulatedRepetitions(e.target.checked)} />
+        Show Accumulated Repetitions
+      </label>
+
+      
       <ComposedChart 
         width={500}
         height={300}
-        data={dataWithMovingAverage}
+        data={dataObject}
         margin={{
           top: 5,
           right: 30,
@@ -170,11 +202,13 @@ export const Statistics = () => {
         >
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis dataKey="date" scale="time" type="number" domain={['auto', 'auto']} tickFormatter={(unixTime) => d3.timeFormat('%Y-%m-%d')(new Date(unixTime))} />
-        <YAxis dataKey={"repetitions"} />
+        <YAxis />
         <Tooltip labelFormatter={(unixTime) => d3.timeFormat('%Y-%m-%d')(new Date(unixTime))}/>
         <Legend />
-        <Bar dataKey="repetitions" fill="#8884d8" />
-        <Line type="monotone" dataKey="movingAverage" stroke="#ff7300" />
+        {showAccumulatedRepetitions && <Area type="monotone" dataKey="accumulatedRepetitions" stroke="#77aa88" fill="#dddddd" />}
+        {showRepetitions && <Bar dataKey="repetitions" fill="#8884d8" />}
+        {showMovingAverage && <Line type="monotone" dataKey="movingAverage" stroke="#ff7300" dot={false}/>}
+
         </ComposedChart >
       
   
@@ -553,6 +587,7 @@ function getNumberCardsGroupedByRepetitions(allCards) {
 }
 
 
+
 /**
  * 
  * @returns an object with the number of repetitions per day
@@ -574,6 +609,10 @@ function getRepetitionsPerDayObject (allCards) {
   
     //remove all NaN values from repetitionHistoryDatesFlatSortedDates
     repetitionHistoryDates = repetitionHistoryDates?.filter((date) => !isNaN(date.getTime()));
+
+    
+
+   
   
   
     //group dates by day and count the number of repetitions per day
@@ -581,6 +620,43 @@ function getRepetitionsPerDayObject (allCards) {
       r[a.toDateString()] = ++r[a.toDateString()] || 1;
       return r;
     }, Object.create(Object));
+
+    const dateObject = Object.keys(repetitionHistoryDatesFlatSortedDatesGroupedByDay ||{}).map((key) => {
+      return {
+        date: key,
+        repetitions: repetitionHistoryDatesFlatSortedDatesGroupedByDay[key]
+      }
+    });
+
+    //get the earliest date
+    const earliestDate = dateObject.at(0)?.date;
+
+    //create an array with all dates from the earliest date to today
+    const timeSeries = d3.timeDay.range(new Date(earliestDate), new Date());
+    
+    //create an object with with date and repetitions for each day 
+    const timeSeriesObject = timeSeries.map((date) => {
+      return {
+        date: date.getTime(),
+        repetitions: repetitionHistoryDatesFlatSortedDatesGroupedByDay[date.toDateString()] || 0
+      }
+    });
+
+    console.log(timeSeriesObject);
+
+    return timeSeriesObject;
+
+
+
+
+   
+
+
+    
+
+   
+
+
   
     //convert repetitionHistoryDatesFlatSortedDatesGroupedByDay's keys into Unix timestamps and store them in an object
     const repetitionHistoryDatesFlatSortedDatesGroupedByDayUnix = Object.keys(repetitionHistoryDatesFlatSortedDatesGroupedByDay ||{}).map((key) => {
