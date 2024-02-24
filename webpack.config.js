@@ -108,6 +108,7 @@ if (isProd) {
     watchFiles: ['src/*'],
     headers: {
       'Access-Control-Allow-Origin': '*',
+      "Access-Control-Allow-Headers": "baggage, sentry-trace"
     },
   };
 }

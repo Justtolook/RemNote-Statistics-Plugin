@@ -1,8 +1,17 @@
 import { usePlugin, renderWidget, useTracker, Card, CardNamespace, Rem, useRunAsync, WidgetLocation } from '@remnote/plugin-sdk';
-import Chart from 'react-apexcharts';
+import React, { useState, useMemo } from 'react';
+import * as d3 from "d3";
+import { LineChart, Line, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Bar, ComposedChart } from 'recharts';
+import DatePicker, { registerLocale, setDefaultLocale }  from 'react-datepicker';
+import de from 'date-fns/locale/de';
+registerLocale('de', de)
+setDefaultLocale('de')
+//import 'react-datepicker/dist/react-datepicker.css';
+
 
 /* Constants */
 var chartColor = '#3362f0';
+
 
 /* Functions */
 export const Statistics = () => {
@@ -13,6 +22,8 @@ export const Statistics = () => {
   var daysOutlook: Number = 30;
   var daysPast: Number = -10;
   var context = useTracker (() => plugin.settings.getSetting('statistics-context'));
+  const [startDate, setStartDate] = useState(new Date(Date.now() - 60 * 24 * 60 * 60 * 1000));
+  const [endDate, setEndDate] = useState(new Date());
 
 
   allCards = getAllCards();
@@ -66,43 +77,113 @@ export const Statistics = () => {
 
   //getFutureDueCardsGroupedByDayAndScore(allCards, daysOutlook);
 
-  return <div style={{ maxHeight: "calc(90vh)" }} className="statisticsBody overflow-y-auto">
-    <div><b>Context: </b> {context}</div>
-    <div><b>Retention rate: </b> {(retentionRate(getNumberRepetitionsGroupedByScore(allCards)))}</div>
-    <div className="vSpacing-1rem"/>
-    {console.time("getFutureDueCardsGroupedByDayAndScore")}
-    {chart_column_stacked(
-      getFutureDueCardsGroupedByDayAndScore(allCards, daysPast, daysOutlook),
-      createUnixTimeSeries(daysPast, daysOutlook),
-      'datetime',
-      'Number of cards due in within the next ' + daysOutlook + ' days by score',
-      daysOutlook)}
-    {console.timeEnd("getFutureDueCardsGroupedByDayAndScore")}
 
-    {chart_column(
-      transformObjectToCategoryFormat(getNumberRepetitionsGroupedByScore(allCards)), 
-      'category', 
-      'Buttons pressed', 
-      daysOutlook)}
-    
 
-    {chart_column(
-      getFutureDueCards(allCards, daysOutlook), 
-      'datetime', 
-      'Number of cards due in within the next ' + daysOutlook + ' days', 
-      daysOutlook)}
+  const renderTotalRepetitions = (
+    <LineChart
+          width={500}
+          height={300}
+          data={getRepetitionsPerDayObject(allCards)}
+          margin={{
+            top: 5,
+            right: 30,
+            left: 20,
+            bottom: 5,
+          }}
+        >
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="date" scale="time" type="number" domain={['auto', 'auto']} tickFormatter={(unixTime) => d3.timeFormat('%Y-%m-%d')(new Date(unixTime))} />
+          <YAxis />
+          <Tooltip labelFormatter={(unixTime) => d3.timeFormat('%Y-%m-%d')(new Date(unixTime))}/>
+          <Legend />
+          <Line type="monotone" dataKey="repetitions" stroke="#8884d8" activeDot={{ r: 8 }} />
+        </LineChart>
+  )
 
-    {chart_column(
-      getNumberCardsGroupedByRepetitions(allCards), 
-      'category', 
-      'Number of cards grouped by number of reviews')}
+  const filteredData = useMemo(() => {
+    if (!startDate || !endDate) {
+      return getRepetitionsPerDayObject(allCards);
+    }
+  
+    return getRepetitionsPerDayObject(allCards).filter((item) => {
+      const itemDate = new Date(item.date);
+      return itemDate >= startDate && itemDate <= endDate;
+    });
+  }, [startDate, endDate, allCards]);
 
-    {chart_repetionsCompounded(allCards)}
-    
-    
-  </div>;
+  /**
+   * Calculate the moving average of the data with a window of 7 days and add it to the data
+   * @param data 
+   * @returns data with a moving average
+   */
+  const calculateMovingAverage = (data) => {
+    const window = 7;
+    const movingAverage = [];
+
+    for (let i = 0; i < data.length; i++) {
+      if (i < window) {
+        const sum = data.slice(0, i + 1).reduce((acc, item) => acc + item.repetitions, 0);
+        movingAverage.push({
+          date: data[i].date,
+          repetitions: data[i].repetitions,
+          movingAverage: sum / (i + 1)
+        });
+        continue;
+      }
+
+      const sum = data.slice(i - window, i).reduce((acc, item) => acc + item.repetitions, 0);
+      movingAverage.push({
+        date: data[i].date,
+        repetitions: data[i].repetitions,
+        movingAverage: sum / window
+      });
+    }
+
+    return movingAverage;
+  }
+
+
+  const dataWithMovingAverage = calculateMovingAverage(filteredData);
+  
+
+
+  return (
+    <div style={{ maxHeight: "calc(90vh)" }} className="statisticsBody overflow-y-auto">
+      <div><b>Context: </b> {context}</div>
+      <div><b>Retention rate: </b> {(retentionRate(getNumberRepetitionsGroupedByScore(allCards)))}</div>
+      <div className="vSpacing-1rem"/>
+
+      <DatePicker locale="de" selected={startDate} onChange={date => setStartDate(date)} />
+      <DatePicker locale="de" selected={endDate} onChange={date => setEndDate(date)} />
+
+
+      <ComposedChart 
+        width={500}
+        height={300}
+        data={dataWithMovingAverage}
+        margin={{
+          top: 5,
+          right: 30,
+          left: 20,
+          bottom: 5,
+        }}
+        >
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis dataKey="date" scale="time" type="number" domain={['auto', 'auto']} tickFormatter={(unixTime) => d3.timeFormat('%Y-%m-%d')(new Date(unixTime))} />
+        <YAxis dataKey={"repetitions"} />
+        <Tooltip labelFormatter={(unixTime) => d3.timeFormat('%Y-%m-%d')(new Date(unixTime))}/>
+        <Legend />
+        <Bar dataKey="repetitions" fill="#8884d8" />
+        <Line type="monotone" dataKey="movingAverage" stroke="#ff7300" />
+        </ComposedChart >
+      
+  
+    </div>
+  );
 
 }
+
+
 
 function getAllCardsInContext(contextRem : Rem | undefined) {
   return contextRem?.getDescendants();
@@ -171,7 +252,7 @@ function getFutureDueCards(allCards, daysOutlook: Number) {
  * @param allCards
  * @param daysOutlook
  */
-function getFutureDueCardsGroupedByDayAndScore(allCards, daysPast: Number, daysOutlook: Number) {
+/*function getFutureDueCardsGroupedByDayAndScore(allCards, daysPast: Number, daysOutlook: Number) {
   //console.time("getFutureDueCardsGroupedByDayAndScore");
   let unixPast = getFutureUnixTimestamp(daysPast); 
   var cards =  allCards?.filter((card) => card.nextRepetitionTime > unixPast);
@@ -259,10 +340,10 @@ function getFutureDueCardsGroupedByDayAndScore(allCards, daysPast: Number, daysO
   
   //console.timeEnd("getFutureDueCardsGroupedByDayAndScore");
   return data;
-}
+}*/
 
 
-function getFutureDueCardsGroupedByDayAndScore2(allCards, daysPast: Number, daysOutlook: Number) {
+/*function getFutureDueCardsGroupedByDayAndScore2(allCards, daysPast: Number, daysOutlook: Number) {
   let unixPast = getFutureUnixTimestamp(daysPast); 
   var cards =  allCards?.filter((card) => card.nextRepetitionTime > unixPast);
 
@@ -299,7 +380,7 @@ function getFutureDueCardsGroupedByDayAndScore2(allCards, daysPast: Number, days
   );
 
   return dataGrouped;
-}
+}*/
 
 
 /**
@@ -323,51 +404,6 @@ function createUnixTimeSeries(start: Number, end: Number) {
 
 
 
-/**
- * Renders a column chart with the given data
- * @param data 
- * @param xaxisType 
- * @param title 
- * @param xMax 
- * @returns 
- */
-function chart_column(data: any[][], xaxisType: String, title: String, xMax?: number) {
-  const chart = {
-    options: {
-      dataLabels: {
-        enabled: false
-      },
-      title: {
-        text: title,
-      },
-      colors: chartColor,
-      xaxis: {
-        type: xaxisType,
-        tickAmount: 'dataPoints',
-        max: {xMax},
-        labels: {
-          show: true
-        }
-      },
-      yaxis: {
-        decimalsInFloat: 0,
-      },
-    },
-    series: [{
-      name: '',
-      data: data
-    }]
-  }
-
-  return <div><div></div>
-  <Chart
-    options={chart.options}
-    type="bar"
-    width="600"
-    height="200"
-    series={chart.series}/></div>;
-}
-
 function getNumberRepetitionsGroupedByScore(allCards) {
   var data = {"Skip": 0, "Forgot": 0, "Partially recalled": 0, "Recalled with effort": 0, "Easily recalled": 0};
   for(let a in allCards) {
@@ -388,77 +424,6 @@ function getNumberRepetitionsGroupedByScore(allCards) {
   return data;
 }
 
-import ApexChart from 'react-apexcharts';
-
-/**
- * Renders a stacked column chart to show the number of due repetitions per day for the next x days by score based on the data from getFutureDueCardsGroupedByDayAndScore()
- * @param data 
- * @param xaxisType 
- * @param title 
- * @param xMax 
- * @returns 
- */
-function chart_column_stacked(data: any[][], categories: any[], xaxisType: String, title: String, xMax?: number) {
-  const chart = {
-    options: {
-      chart: {
-        stacked: true,
-      },
-      responsive: [{
-        breakpoint: 480,
-        options: {
-          legend: {
-            position: 'bottom',
-            offsetX: -10,
-            offsetY: 0
-          }
-        }
-      }],
-      dataLabels: {
-        enabled: false,
-        total: {
-          enabled: true,
-          style: {
-            fontSize: '13px',
-            fontWeight: 600,
-          }
-        }
-      },
-      title: {
-        text: title,
-      },
-      xaxis: {
-        type: xaxisType,
-        categories: categories,
-        labels: {
-          show: true
-        }
-      },
-      yaxis: {
-        decimalsInFloat: 0,
-      },
-    },
-    series:
-    data.map((scoreGroup) => {
-      return {
-        name: scoreGroup.score,
-        data: scoreGroup.data
-      }
-    }) 
-  }
-
-  return (
-    <div>
-      <Chart
-        options={chart.options}
-        type="bar"
-        width="600"
-        height="200"
-        series={chart.series}
-      />
-    </div>
-  );
-}
 
 
 

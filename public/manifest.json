@@ -1,12 +1,12 @@
 {
   "id": "statistics",
-  "manifestVersion": 2,
+  "manifestVersion": 1,
   "name": "Statistics",
   "author": "henrik",
   "repoUrl": "https://github.com/Justtolook/RemNote-Statistics-Plugin",
-  "projectUrl": "",
-  "supportUrl": "",
-  "changelogUrl": "",
+  "projectUrl": "https://github.com/Justtolook/RemNote-Statistics-Plugin",
+  "supportUrl": "https://github.com/Justtolook/RemNote-Statistics-Plugin",
+  "changelogUrl": "https://github.com/Justtolook/RemNote-Statistics-Plugin/commits/main/",
   "version": {
     "major": 2,
     "minor": 0,

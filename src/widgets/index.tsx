@@ -2,6 +2,7 @@ import { declareIndexPlugin, ReactRNPlugin, WidgetLocation } from '@remnote/plug
 import '../style.css';
 import '../App.css';
 
+
 async function onActivate(plugin: ReactRNPlugin) {
 
   // --- General Statistics Widget ---
