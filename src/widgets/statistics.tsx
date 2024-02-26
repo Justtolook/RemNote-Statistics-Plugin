@@ -35,8 +35,7 @@ export const Statistics = () => {
   //const allCardsArray = Object.keys(allCards || {}).map((key) => allCards[key]);
 
   //console.log(allCardsArray);
-  const repetitionsObject = getRepetitionsObject(allCards);
-  const repetitionsPerDay = getRepetitionsPerDay(repetitionsObject);
+
 
 
   /**
@@ -74,7 +73,8 @@ export const Statistics = () => {
   if(context == "Current Rem") allCards = allCardsInContext; 
 
 
-
+  const repetitionsObject = getRepetitionsObject(allCards);
+  const repetitionsPerDay = getRepetitionsPerDay(repetitionsObject);
 
   daysOutlook = useTracker(() => plugin.settings.getSetting('statistics-nDays-outlook'));
   daysPast = useTracker(() => plugin.settings.getSetting('statistics-nDays-past'));
@@ -211,6 +211,93 @@ export const Statistics = () => {
     )
   }
 
+  /**
+   * render a recharts stacked bar chart with the number of repetitions per day and score 
+   * use repetitionsPerDay as input
+   */
+  const renderRepetitionsByDayAndScore = () => {
+    //console.time("renderRepetitionsByDayAndScore");
+    const data = filteredData;
+    console.log("score data: ", data);
+    //console.timeEnd("renderRepetitionsByDayAndScore");
+    return (
+      <ComposedChart
+        width={500}
+        height={300}
+        data={data}
+        margin={{
+          top: 5,
+          right: 30,
+          left: 20,
+          bottom: 5,
+        }}
+      >
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis dataKey="date" scale="time" type="number" domain={['auto', 'auto']} tickFormatter={(unixTime) => d3.timeFormat('%Y-%m-%d')(new Date(unixTime))} />
+        <YAxis />
+        <Tooltip labelFormatter={(unixTime) => d3.timeFormat('%Y-%m-%d')(new Date(unixTime))}/>
+        <Legend />
+        <Bar type="monotone" dataKey="scoreForgot" stackId="a" stroke="#ff7300" fill="#ff7300" />
+        <Bar type="monotone" dataKey="scoreSkip" stackId="a" stroke="#8884d8" fill="#8884d8" />
+        <Bar type="monotone" dataKey="scorePartiallyRecalled" stackId="a" stroke="#82ca9d" fill="#82ca9d" />
+        <Bar type="monotone" dataKey="scoreRecalledWithEffort" stackId="a" stroke="#ffc658" fill="#ffc658" />
+        <Bar type="monotone" dataKey="scoreEasilyRecalled" stackId="a" stroke="#77aa88" fill="#77aa88" />
+      </ComposedChart>
+    )
+  }
+
+    
+  /**
+   * render a recharts bar chart with the average response time per day
+   * use repetitionsPerDay as input
+   */
+  const renderResponseTime = () => {
+    const data = filteredData;
+    return (
+      <BarChart
+        width={500}
+        height={300}
+        data={data}
+        margin={{
+          top: 5,
+          right: 30,
+          left: 20,
+          bottom: 5,
+        }}
+      >
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis dataKey="date" scale="time" type="number" domain={['auto', 'auto']} tickFormatter={(unixTime) => d3.timeFormat('%Y-%m-%d')(new Date(unixTime))} />
+        <YAxis unit="s"/>
+        <Tooltip labelFormatter={(unixTime) => d3.timeFormat('%Y-%m-%d')(new Date(unixTime))}/>
+        <Legend />
+        <Bar type="monotone" dataKey="avgResponseTime" fill="#ff7300" dot={false} unit="s"/>
+      </BarChart>
+    )
+  }
+
+  const renderSumResponseTime = () => {
+    const data = filteredData;
+    return (
+      <BarChart
+        width={500}
+        height={300}
+        data={data}
+        margin={{
+          top: 5,
+          right: 30,
+          left: 20,
+          bottom: 5,
+        }}
+      >
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis dataKey="date" scale="time" type="number" domain={['auto', 'auto']} tickFormatter={(unixTime) => d3.timeFormat('%Y-%m-%d')(new Date(unixTime))} />
+        <YAxis unit="m"/>
+        <Tooltip labelFormatter={(unixTime) => d3.timeFormat('%Y-%m-%d')(new Date(unixTime))}/>
+        <Legend />
+        <Bar type="monotone" dataKey="sumResponseTime" fill="#ff7300" unit="m"/>
+      </BarChart>
+    )
+  }
 
 
 
@@ -264,7 +351,13 @@ export const Statistics = () => {
         <div className="vSpacing-1rem"/>
 
         </ComposedChart >
+
+        {renderSumResponseTime()}
+
+        {renderResponseTime()}
         
+        {renderRepetitionsByDayAndScore()}
+
         {renderRepetitionsGroupedByScore()}
   
     </div>
@@ -710,6 +803,12 @@ function getRepetitionsPerDay(repetitionsObject) {
         date: date.getTime(), 
         repetitions: 0, 
         responseTime: 0,
+        revealTime: 0,
+        scoreSkip: 0,
+        scoreForgot: 0,
+        scorePartiallyRecalled: 0,
+        scoreRecalledWithEffort: 0,
+        scoreEasilyRecalled: 0,
         score: {
           0: 0,
           0.01: 0,
@@ -733,24 +832,62 @@ function getRepetitionsPerDay(repetitionsObject) {
       acc[curr.date] = {
         date: curr.date,
         repetitions: 0,
-        score: {},
-        avgResponseTime: 0
+        scoreSkip: 0,
+        scoreForgot: 0,
+        scorePartiallyRecalled: 0,
+        scoreRecalledWithEffort: 0,
+        scoreEasilyRecalled: 0,
+        score: {
+          0: 0,
+          0.01: 0,
+          0.5: 0,
+          1: 0,
+          1.5: 0
+        },
+        sumResponseTime: 0,
+        sumRevealTime: 0,
+        avgResponseTime: 0,
+        avgRevealTime: 0
         //count: 0
       };
     }
   
     acc[curr.date].repetitions += 1;
-    acc[curr.date].avgResponseTime = Math.round(((acc[curr.date].avgResponseTime * acc[curr.date].repetitions) + curr.responseTime) / (acc[curr.date].repetitions + 1));
+    acc[curr.date].sumResponseTime += curr.responseTime;
+    acc[curr.date].sumRevealTime += curr.revealTime;
     //acc[curr.date].count += 1;
   
+    /*
     if (!acc[curr.date].score[curr.score]) {
       acc[curr.date].score[curr.score] = 0;
     }
+    */
   
     acc[curr.date].score[curr.score] += 1;
+
+    switch(curr.score) {
+      case 0: acc[curr.date].scoreForgot += 1; break;
+      case 0.01: acc[curr.date].scoreSkip += 1; break;
+      case 0.5: acc[curr.date].scorePartiallyRecalled += 1; break;
+      case 1: acc[curr.date].scoreRecalledWithEffort += 1; break;
+      case 1.5: acc[curr.date].scoreEasilyRecalled += 1; break;
+    }
   
     return acc;
   }, {});
+
+  
+  for (const key in dataObject) {
+    //calculate the average response and reveal time
+    dataObject[key].avgResponseTime = Math.round(dataObject[key].sumResponseTime / (dataObject[key].repetitions * 1000));
+    dataObject[key].avgRevealTime = Math.round(dataObject[key].sumRevealTime / (dataObject[key].repetitions * 1000));
+
+    //convert ms to minutes of sum of response and reveal time
+    dataObject[key].sumResponseTime = Math.round(dataObject[key].sumResponseTime / 60000);
+    dataObject[key].sumRevealTime = Math.round(dataObject[key].sumRevealTime / 60000);
+
+  }
+
 
   if(dataObject === undefined) return [];
   const data = Object.values(dataObject);
