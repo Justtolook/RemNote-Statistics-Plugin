@@ -31,6 +31,13 @@ export const Statistics = () => {
 
   allCards = getAllCards();
 
+  //convert allCards into an array of objects
+  //const allCardsArray = Object.keys(allCards || {}).map((key) => allCards[key]);
+
+  //console.log(allCardsArray);
+  const repetitionsObject = getRepetitionsObject(allCards);
+  const repetitionsPerDay = getRepetitionsPerDay(repetitionsObject);
+
 
   /**
    * get the rem id of the widget context
@@ -83,6 +90,24 @@ export const Statistics = () => {
 
 
 
+
+  /**
+   * filter the repetitionsPerDay by the date range
+   */
+  const filteredData = useMemo(() => {
+    if (!startDate || !endDate) {
+      return repetitionsPerDay;
+    }
+    //check if repetitionsPerDay is undefined
+    if(repetitionsPerDay === undefined) return [];
+    return repetitionsPerDay.filter((item) => {
+      const itemDate = new Date(item.date);
+      return itemDate >= startDate && itemDate <= endDate;
+    });
+  }, [startDate, endDate, allCards]);
+  console.log(filteredData);
+
+  /*
   const filteredData = useMemo(() => {
     if (!startDate || !endDate) {
       return getRepetitionsPerDayObject(allCards);
@@ -93,6 +118,7 @@ export const Statistics = () => {
       return itemDate >= startDate && itemDate <= endDate;
     });
   }, [startDate, endDate, allCards]);
+  */
 
   /**
    * Calculate the moving average of the data with a window of 7 days and add it to the data
@@ -103,7 +129,7 @@ export const Statistics = () => {
     const window = 7;
     const movingAverage = [];
 
-    for (let i = 0; i < data.length; i++) {
+    for (let i = 0; i < data?.length; i++) {
       if (i < window) {
         const sum = data.slice(0, i + 1).reduce((acc, item) => acc + item.repetitions, 0);
         movingAverage.push({
@@ -158,7 +184,33 @@ export const Statistics = () => {
       accumulatedRepetitions: calculateAccumulatedRepetitions(filteredData)[index].accumulatedRepetitions
     }
   });
-  
+
+  const renderRepetitionsGroupedByScore = () => {
+
+    const data = transformObjectToCategoryFormat(getNumberRepetitionsGroupedByScore(allCards)).map(({ x: score, y: repetitions }) => ({ score, repetitions }));
+    
+    return (
+      <BarChart
+        width={500}
+        height={300}
+        data={data}
+        margin={{
+          top: 5,
+          right: 30,
+          left: 20,
+          bottom: 5,
+        }}
+      >
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis dataKey="score" />
+        <YAxis />
+        <Tooltip />
+        <Legend />
+        <Bar dataKey="repetitions" fill="#8884d8" />
+      </BarChart>
+    )
+  }
+
 
 
 
@@ -209,8 +261,11 @@ export const Statistics = () => {
         {showRepetitions && <Bar dataKey="repetitions" fill="#8884d8" />}
         {showMovingAverage && <Line type="monotone" dataKey="movingAverage" stroke="#ff7300" dot={false}/>}
 
+        <div className="vSpacing-1rem"/>
+
         </ComposedChart >
-      
+        
+        {renderRepetitionsGroupedByScore()}
   
     </div>
   );
@@ -586,6 +641,131 @@ function getNumberCardsGroupedByRepetitions(allCards) {
   return data;
 }
 
+function getRepetitionsObject(Cards) {
+  console.time("repetitionsObject");
+  //create an array with _id and repetitionHistory
+  var data = Cards?.map((card) => {
+    return {
+      _id: card._id, 
+      repetitionHistory: card.repetitionHistory};
+  });
+
+
+
+  //remove all cards where repetitionHistory is undefined
+  data = data?.filter((card) => card.repetitionHistory !== undefined);
+
+  //delete the unnecessary property from each repetitionHistory object
+  data = data?.map((card) => {
+    return {
+      repetitionHistory: card.repetitionHistory?.map((repetition) => {
+        const { scheduler, isCram, metadata, schedulerMetadata, lazyLoad, subQueueId, ...rest } = repetition;
+        //add the _id to each repetition
+        rest._id = card._id;
+        return rest;
+      })
+    }
+  });
+  //console.log("repetitionsObject: ", data);
+
+  //flatten to the repetitionHistory array
+  data = data?.map((card) => card.repetitionHistory).flat();
+  //console.log("repetitionsObject: ", data);
+
+  console.timeEnd("repetitionsObject");
+
+  return data;
+}
+
+/**
+ * create an object that groups the repetitions by day
+ * it should first normalize the unix-date to the start of each day
+ * for each day, it should have property with the date, the number of repetitions and the number of repetitions per score
+ * @param repetitionsObject
+ * @returns an object with the number of repetitions per day
+ */
+function getRepetitionsPerDay(repetitionsObject) {
+  //convert the date into a Unix timestamp
+  if(repetitionsObject === undefined) return [];
+  repetitionsObject = repetitionsObject?.map((repetition) => {
+    repetition.date = new Date(repetition.date).setHours(0,0,0,0);
+    return repetition;
+  });
+
+  //sort the repetitionsObject by date
+  repetitionsObject = repetitionsObject?.sort((a,b) => a.date - b.date);
+
+  //get the earliest date
+  const earliestDate = repetitionsObject[0]?.date;
+
+  //create an array with all dates from the earliest date to today
+
+  const timeSeries = d3.timeDay.range(new Date(earliestDate), new Date());
+
+  //check for missing dates from the timeSeries in repetitionsObject and add them with a value of 0
+  const repetitionsObjectDates = repetitionsObject?.map((repetition) => repetition.date);
+  timeSeries?.forEach((date) => {
+    if(!repetitionsObjectDates.includes(date.getTime())) {
+      repetitionsObject.push({
+        date: date.getTime(), 
+        repetitions: 0, 
+        responseTime: 0,
+        score: {
+          0: 0,
+          0.01: 0,
+          0.5: 0,
+          1: 0,
+          1.5: 0
+        }});
+    }
+  });
+
+  console.log("repetionsObject: ", repetitionsObject);
+
+
+  //sort the repetitionsObject by date
+  repetitionsObject = repetitionsObject?.sort((a,b) => a.date - b.date);
+
+  //rollup over repetitionsObject and group repetitions by date and add the following properties for each date:
+  // sum of repetitions, sum of repetitions per score, average response time
+  const dataObject = repetitionsObject?.reduce((acc, curr) => {
+    if (!acc[curr.date]) {
+      acc[curr.date] = {
+        date: curr.date,
+        repetitions: 0,
+        score: {},
+        avgResponseTime: 0
+        //count: 0
+      };
+    }
+  
+    acc[curr.date].repetitions += 1;
+    acc[curr.date].avgResponseTime = Math.round(((acc[curr.date].avgResponseTime * acc[curr.date].repetitions) + curr.responseTime) / (acc[curr.date].repetitions + 1));
+    //acc[curr.date].count += 1;
+  
+    if (!acc[curr.date].score[curr.score]) {
+      acc[curr.date].score[curr.score] = 0;
+    }
+  
+    acc[curr.date].score[curr.score] += 1;
+  
+    return acc;
+  }, {});
+
+  if(dataObject === undefined) return [];
+  const data = Object.values(dataObject);
+
+
+
+
+
+
+
+
+  console.log("repetitionsPerDay: ", data);
+  return data;
+}
+
 
 
 /**
@@ -593,13 +773,14 @@ function getNumberCardsGroupedByRepetitions(allCards) {
  * @returns an object with the number of repetitions per day
  */
 function getRepetitionsPerDayObject (allCards) {
-  
     const repetitionHistory = allCards?.map((card) => card.repetitionHistory);
   
     var repetitionHistoryDates = repetitionHistory?.map((repetition) => repetition?.map((repetition) => repetition.date));
+    //console.log("repetitionHistoryDates: ", repetitionHistoryDates);
   
     //flatten the repetitionHistoryDates array
     repetitionHistoryDates = repetitionHistoryDates?.flat();
+    //console.log("repetitionHistoryDatesFlat: ", repetitionHistoryDates);
   
     //sort dates in ascending order
     repetitionHistoryDates = repetitionHistoryDates?.sort((a,b ) => a -b);;
@@ -642,8 +823,7 @@ function getRepetitionsPerDayObject (allCards) {
       }
     });
 
-    console.log(timeSeriesObject);
-
+    //console.log(timeSeriesObject);
     return timeSeriesObject;
 
 
