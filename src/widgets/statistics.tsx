@@ -1,7 +1,7 @@
 import { usePlugin, renderWidget, useTracker, Card, CardNamespace, Rem, useRunAsync, WidgetLocation } from '@remnote/plugin-sdk';
 import React, { useState, useMemo } from 'react';
 import * as d3 from "d3";
-import { LineChart, Line, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Bar, ComposedChart, Area } from 'recharts';
+import { LineChart, Line, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Bar, ComposedChart, Area, ResponsiveContainer } from 'recharts';
 import DatePicker, { registerLocale, setDefaultLocale }  from 'react-datepicker';
 import de from 'date-fns/locale/de';
 registerLocale('de', de)
@@ -24,6 +24,8 @@ export const Statistics = () => {
   var context = useTracker (() => plugin.settings.getSetting('statistics-context'));
   const [startDate, setStartDate] = useState(new Date(Date.now() - 60 * 24 * 60 * 60 * 1000));
   const [endDate, setEndDate] = useState(new Date());
+  const [startDateDueCards, setStartDateDueCards] = useState(new Date(Date.now() - 10 * 24 * 60 * 60 * 1000));
+  const [endDateDueCards, setEndDateDueCards] = useState(new Date(Date.now() + 60 * 24 * 60 * 60 * 1000));
   const [showRepetitions, setShowRepetitions] = useState(true);
   const [showMovingAverage, setShowMovingAverage] = useState(true);
   const [showAccumulatedRepetitions, setShowAccumulatedRepetitions] = useState(true);
@@ -72,7 +74,7 @@ export const Statistics = () => {
 
   if(context == "Current Rem") allCards = allCardsInContext; 
 
-
+  const dueCards = getDueCardsByDay(allCards);
   const repetitionsObject = getRepetitionsObject(allCards);
   const repetitionsPerDay = getRepetitionsPerDay(repetitionsObject);
 
@@ -106,6 +108,19 @@ export const Statistics = () => {
     });
   }, [startDate, endDate, allCards]);
   console.log(filteredData);
+
+  /**
+   * filter the dueCards by the date range
+   */
+  const filteredDueCards = useMemo(() => {
+    if (!startDateDueCards || !endDateDueCards) {
+      return dueCards;
+    }
+    return dueCards.filter((item) => {
+      const itemDate = new Date(item.date);
+      return itemDate >= startDateDueCards && itemDate <= endDateDueCards;
+    });
+  }, [startDateDueCards, endDateDueCards, allCards]);
 
   /*
   const filteredData = useMemo(() => {
@@ -299,6 +314,42 @@ export const Statistics = () => {
     )
   }
 
+  /**
+   * render a recharts compound bar chart with the due repetitions in the past and future
+   */
+  
+  const renderDueCards = () => {
+    const data = filteredDueCards;
+    return (
+      <ResponsiveContainer width={700} height="80%">
+        <div>
+      <DatePicker locale="de" selected={startDateDueCards} onChange={date => setStartDateDueCards(date)} />
+      <DatePicker locale="de" selected={endDateDueCards} onChange={date => setEndDateDueCards(date)} />
+      <ComposedChart
+        width={700}
+        height={300}
+        data={data}
+        margin={{
+          top: 5,
+          right: 30,
+          left: 20,
+          bottom: 5,
+        }}
+      >
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis dataKey="date" scale="time" type="number" domain={['auto', 'auto']} tickFormatter={(unixTime) => d3.timeFormat('%Y-%m-%d')(new Date(unixTime))} />
+        <YAxis yAxisId="left" orientation='left'/>
+        <YAxis yAxisId="right" orientation='right' name='sum'/>
+        <Tooltip labelFormatter={(unixTime) => d3.timeFormat('%Y-%m-%d')(new Date(unixTime))}/>
+        <Legend />
+        
+        <Bar yAxisId="right" dataKey="dueCards" fill="#8884d8" name="Due cards" />
+      </ComposedChart>
+      </div>
+      </ResponsiveContainer>
+    )
+  }
+
 
 
   return (
@@ -351,6 +402,8 @@ export const Statistics = () => {
         <div className="vSpacing-1rem"/>
 
         </ComposedChart >
+
+        {renderDueCards()}
 
         {renderSumResponseTime()}
 
@@ -432,9 +485,10 @@ function getFutureDueCards(allCards, daysOutlook: Number) {
 /**
  * count the number of cards due in the next x days per day and group them by the last score (use getNumberRepetitionsGroupedByScore()). The output should be ready to be used by chart_column_stacked()
  * @param allCards
+ * @param daysPast
  * @param daysOutlook
  */
-/*function getFutureDueCardsGroupedByDayAndScore(allCards, daysPast: Number, daysOutlook: Number) {
+function getFutureDueCardsGroupedByDayAndScore(allCards, daysPast: Number, daysOutlook: Number) {
   //console.time("getFutureDueCardsGroupedByDayAndScore");
   let unixPast = getFutureUnixTimestamp(daysPast); 
   var cards =  allCards?.filter((card) => card.nextRepetitionTime > unixPast);
@@ -522,7 +576,7 @@ function getFutureDueCards(allCards, daysOutlook: Number) {
   
   //console.timeEnd("getFutureDueCardsGroupedByDayAndScore");
   return data;
-}*/
+}
 
 
 /*function getFutureDueCardsGroupedByDayAndScore2(allCards, daysPast: Number, daysOutlook: Number) {
@@ -734,13 +788,63 @@ function getNumberCardsGroupedByRepetitions(allCards) {
   return data;
 }
 
+/**
+ * get the number of due cards by day
+ * @param Cards 
+ * @returns 
+ */
+function getDueCardsByDay(Cards) {
+  //convert the date into a Unix timestamp
+
+
+  const dueDates = Cards?.map((card) => new Date(card.nextRepetitionTime).setHours(0,0,0,0));
+
+  //group dates by day and count the number of repetitions per day
+  const dueCardsGroupedByDay = dueDates?.reduce((r, a) => {
+    r[a] = ++r[a] || 1;
+    return r;
+  }, Object.create(Object));
+
+  const data = Object.keys(dueCardsGroupedByDay ||{}).map((key) => {
+    return {
+      date: parseInt(key), 
+      dueCards: dueCardsGroupedByDay[key],
+      accDueCards: 0
+    };
+  });
+
+  //check if a date is = "-3600000" and set it to today
+  data.forEach((item) => {
+    if(item.date === -3600000) item.date = new Date().setHours(0,0,0,0);
+  });
+  //sort the data
+  data.sort((a,b) => a.date - b.date);
+
+  //iterate over data and add the number of accumulated due cards
+  for(let i = 0; i < data.length; i++) {
+    if(i === 0) {
+      data[i].accDueCards = data[i].dueCards;
+      continue;
+    }
+    data[i].accDueCards = data[i].dueCards + data[i-1].accDueCards;
+  }
+
+  
+
+  //console.log("dueCards: ", data);
+
+
+  return data;
+}
+
 function getRepetitionsObject(Cards) {
   console.time("repetitionsObject");
   //create an array with _id and repetitionHistory
   var data = Cards?.map((card) => {
     return {
       _id: card._id, 
-      repetitionHistory: card.repetitionHistory};
+      repetitionHistory: card.repetitionHistory
+    };
   });
 
 
