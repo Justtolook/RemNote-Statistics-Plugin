@@ -11,7 +11,7 @@ async function onActivate(plugin: ReactRNPlugin) {
     'statistics',
     WidgetLocation.Popup,
     {
-      dimensions: { height: 'auto', width: 'auto'},
+      dimensions: { height: 1200, width: 1000},
     }
   );
   // A command that opens the heatmap widget in a new pane 

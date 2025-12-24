@@ -168,7 +168,7 @@ function chart_column(data: any[][], xaxisType: String, title: String, xMax?: nu
       title: {
         text: title,
       },
-      colors: chartColor,
+      colors: [chartColor],
       xaxis: {
         type: xaxisType,
         tickAmount: 'dataPoints',
@@ -191,8 +191,8 @@ function chart_column(data: any[][], xaxisType: String, title: String, xMax?: nu
   <Chart
     options={chart.options}
     type="bar"
-    width="600"
-    height="200"
+    width="100%"
+    height="300"
     series={chart.series}/></div>;
 }
 
@@ -268,7 +268,7 @@ function chart_repetionsCompounded(allCards) {
         enabled: false
       },
       stroke: {
-        colors: chartColor,
+        colors: [chartColor],
         curve: 'smooth'
       },
       chart: {
@@ -280,7 +280,7 @@ function chart_repetionsCompounded(allCards) {
       },
       fill: {
         type: 'solid',
-        colors: chartColor
+        colors: [chartColor]
       },
       tooltip: {
         enabled: true,
