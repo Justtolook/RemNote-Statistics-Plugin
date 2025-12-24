@@ -1,4 +1,4 @@
-import { usePlugin, renderWidget, useTracker, Card, CardNamespace, Rem, useRunAsync, WidgetLocation } from '@remnote/plugin-sdk';
+import { usePlugin, renderWidget, useTrackerPlugin, Card, CardNamespace, PluginRem, useRunAsync, WidgetLocation } from '@remnote/plugin-sdk';
 import Chart from 'react-apexcharts';
 
 /* Constants */
@@ -11,7 +11,7 @@ export const Statistics = () => {
   var allRemsInContext;
   var allCardsInContext;
   var daysOutlook: Number = 30;
-  var context = useTracker (() => plugin.settings.getSetting('statistics-context'));
+  var context = useTrackerPlugin (() => plugin.settings.getSetting('statistics-context'));
 
   allCards = getAllCards();
 
@@ -52,18 +52,18 @@ export const Statistics = () => {
 
 
 
-  daysOutlook = useTracker(() => plugin.settings.getSetting('statistics-nDays-outlook'));
+  daysOutlook = useTrackerPlugin(() => plugin.settings.getSetting('statistics-nDays-outlook'));
 
   //check if color setting is a valid hex color (not case sensitive)
-  const chartColorSettings = useTracker(() => plugin.settings.getSetting('statistics-chart-color'));
+  const chartColorSettings = useTrackerPlugin(() => plugin.settings.getSetting('statistics-chart-color'));
   if(/^#[0-9A-F]{6}$/i.test(chartColorSettings)) {
     chartColor = chartColorSettings;
   }
 
-  return <div style={{ maxHeight: "calc(90vh)" }} class="statisticsBody overflow-y-auto">
+  return <div style={{ maxHeight: "calc(90vh)" }} className="statisticsBody overflow-y-auto">
     <div><b>Context: </b> {context}</div>
     <div><b>Retention rate: </b> {(retentionRate(getNumberRepetitionsGroupedByScore(allCards)))}</div>
-    <div class="vSpacing-1rem"/>
+    <div className="vSpacing-1rem"/>
     {chart_column(
       transformObjectToCategoryFormat(getNumberRepetitionsGroupedByScore(allCards)), 
       'category', 
@@ -197,17 +197,17 @@ function chart_column(data: any[][], xaxisType: String, title: String, xMax?: nu
 }
 
 function getNumberRepetitionsGroupedByScore(allCards) {
-  var data = {"Skip": 0, "Forgot": 0, "Partially recalled": 0, "Recalled with effort": 0, "Easily recalled": 0};
+  var data = {"Skip": 0, "Forgot": 0, "Hard": 0, "Good": 0, "Easy": 0};
   for(let a in allCards) {
     
     for(let r in allCards[a].repetitionHistory) {
       let score = allCards[a].repetitionHistory[r].score;
       switch(score) {
-        case 0: data["Skip"]++; break;
-        case 0.01: data["Forgot"]++; break;
-        case 0.5: data["Partially recalled"]++; break;
-        case 1: data["Recalled with effort"]++; break;
-        case 1.5: data["Easily recalled"]++; break;
+        case 0.01: data["Skip"]++; break;
+        case 0: data["Forgot"]++; break;
+        case 0.5: data["Hard"]++; break;
+        case 1: data["Good"]++; break;
+        case 1.5: data["Easy"]++; break;
 
     }
   }
@@ -230,8 +230,8 @@ function transformObjectToCategoryFormat(data) {
 
 
 function retentionRate(data) {
-  var a = data["Forgot"] + data["Partially recalled"];
-  var b = data["Recalled with effort"] + data["Easily recalled"];
+  var a = data["Forgot"] ;
+  var b = data["Hard"]+ data["Good"] + data["Easy"];
 
   return (b/(a+b)).toFixed(2);
 }
@@ -306,7 +306,7 @@ function chart_repetionsCompounded(allCards) {
  * @returns all cards in the database
  */
 function getAllCards() {
-  const allCards: Card[] | undefined = useTracker(
+  const allCards: Card[] | undefined = useTrackerPlugin(
     async (reactivePlugin) => await reactivePlugin.card.getAll()
   );
   return allCards;
