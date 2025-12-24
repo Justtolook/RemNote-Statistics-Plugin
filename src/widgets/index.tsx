@@ -45,25 +45,25 @@ async function onActivate(plugin: ReactRNPlugin) {
     'heatmap',
     WidgetLocation.Popup,
     {
-      dimensions: { height: 800, width: 1000},
+      dimensions: { height: 600, width: 1000},
     },
   );
   //await plugin.window.openWidgetInPane('heatmap');
   // Register settings
   await plugin.settings.registerStringSetting({
     id: 'HeatmapColorLow',
-    title: 'Color for low values',
+    title: 'Color for Low values',
     defaultValue: '#b3dff0',
   });
   await plugin.settings.registerStringSetting({
-    id: 'HeatmapColorNormal',
-    title: 'Color for normal values',
-    defaultValue: '#3362f0',
+    id: 'HeatmapColorHigh',
+    title: 'Color for High values',
+    defaultValue: '#1302d1',
   });
   await plugin.settings.registerNumberSetting({
-    id: 'HeatmapLowUpperBound',
-    title: 'Upper bound for low number of repetitions',
-    defaultValue: 30,
+    id: 'HeatmapTarget',
+    title: 'Target number of repetitions (defines "High" in HeatMap)',
+    defaultValue: 50,
   });
 
   // COMMAND 2: Open Heatmap (NOW SAVES CONTEXT TOO)
