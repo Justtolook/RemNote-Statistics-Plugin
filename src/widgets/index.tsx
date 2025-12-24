@@ -14,11 +14,18 @@ async function onActivate(plugin: ReactRNPlugin) {
       dimensions: { height: 1200, width: 1000},
     }
   );
-  // A command that opens the heatmap widget in a new pane 
+  // A command that opens the statistics widget
   await plugin.app.registerCommand({
     id: 'open-statistics',
     name: 'Open Statistics',
     action: async () => {
+      const focusedRem = await plugin.focus.getFocusedRem();
+      
+      // Save the context to session storage (Single Source of Truth)
+      await plugin.storage.setSession('statistics-context', { 
+        focusedRemId: focusedRem?._id 
+      });
+
       plugin.widget.openPopup('statistics');
     },
   });
@@ -29,30 +36,6 @@ async function onActivate(plugin: ReactRNPlugin) {
     defaultValue: '#3362f0',
     title: 'Chart Color',
     description: 'Enter a valid hex color code for the charts (e.g. #3362f0). If you enter an invalid color, a default color will be used.',
-  });
-
-  await plugin.settings.registerNumberSetting({
-    id: 'statistics-nDays-outlook',
-    title: 'Number of days to look into the future for due cards',
-    defaultValue: 30,
-  });
-
-  await plugin.settings.registerDropdownSetting({
-    id: 'statistics-context',
-    title: 'Context',
-    defaultValue: 'Global',
-    options: [
-      {
-        key: "0",
-        value: "Global",
-        label: "Global",
-      },
-      {
-        key: "1",
-        value: "Current Rem",
-        label: "Current Rem",
-      }
-    ]
   });
 
   // --- Heatmap Widget ---

@@ -1,4 +1,4 @@
-import { usePlugin, renderWidget, useTracker, Card, CardNamespace, Rem, useRunAsync } from '@remnote/plugin-sdk';
+import { usePlugin, renderWidget, useTrackerPlugin, Card, CardNamespace, PluginRem, useRunAsync } from '@remnote/plugin-sdk';
 import Chart from 'react-apexcharts';
 
 const DEFAULT_heatmapColorLow = '#b3dff0';
@@ -14,10 +14,10 @@ export const Heatmap = () => {
   
   var allRemsInContext;
   var allCardsInContext;
-  var context = useTracker (() => plugin.settings.getSetting('statistics-context'));
-  heatmapColorLow = useTracker(() => plugin.settings.getSetting('HeatmapColorLow'));
-  heatmapColorNormal = useTracker(() => plugin.settings.getSetting('HeatmapColorNormal'));
-  heatmapLowUpperBound = useTracker(() => plugin.settings.getSetting('HeatmapLowUpperBound'));
+  var context = useTrackerPlugin (() => plugin.settings.getSetting('statistics-context'));
+  heatmapColorLow = useTrackerPlugin(() => plugin.settings.getSetting('HeatmapColorLow'));
+  heatmapColorNormal = useTrackerPlugin(() => plugin.settings.getSetting('HeatmapColorNormal'));
+  heatmapLowUpperBound = useTrackerPlugin(() => plugin.settings.getSetting('HeatmapLowUpperBound'));
   //check if heatmapColorLow and heatmapColorNormal are valid colors, if not set them to default values
   if (!/^#[0-9A-F]{6}$/i.test(heatmapColorLow)) {
     heatmapColorLow = DEFAULT_heatmapColorLow;
@@ -25,7 +25,7 @@ export const Heatmap = () => {
   if (!/^#[0-9A-F]{6}$/i.test(heatmapColorNormal)) {
     heatmapColorNormal = DEFAULT_heatmapColorNormal;
   }
-  var allCards: Card[] | undefined = useTracker(
+  var allCards: Card[] | undefined = useTrackerPlugin(
     async (reactivePlugin) => await reactivePlugin.card.getAll()
   );
 
@@ -75,7 +75,7 @@ export const Heatmap = () => {
    * (TBD): Another heatmap that shows the number of rem updates? per day
    * code to initialize the necessary data: 
    --- start ---
-   const allRem: Rem[] | undefined = useTracker(
+   const allRem: Rem[] | undefined = useTrackerPlugin(
     async (reactivePlugin) => await reactivePlugin.rem.getAll()
   );
     
