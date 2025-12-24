@@ -5,14 +5,32 @@ import React from 'react';
 /* Constants */
 var chartColor = '#3362f0';
 
+type RangeMode = 'Today' | 'Yesterday' | 'Week' | 'This Week' | 'Last Week' | 'Month' | 'This Month' | 'Last Month' | 'Year' | 'This Year' | 'Last Year' | 'All';
+
 /* Functions */
 export const Statistics = () => {
   const plugin = usePlugin();
   
+  // -- Initialization Helper --
+  // Initialize with 'This Year' by default
+  const getInitialState = () => {
+    const t = new Date();
+    const start = new Date(t.getFullYear(), 0, 1); // Jan 1st current year
+    const end = t; // Today
+    return {
+      mode: 'This Year' as RangeMode,
+      start: start.toISOString().split('T')[0],
+      end: end.toISOString().split('T')[0]
+    };
+  };
+
+  const initial = React.useMemo(() => getInitialState(), []);
+
   // -- State Management --
   const [contextMode, setContextMode] = React.useState<'Global' | 'Current'>('Global');
-  const [dateStart, setDateStart] = React.useState<string>('');
-  const [dateEnd, setDateEnd] = React.useState<string>('');
+  const [rangeMode, setRangeMode] = React.useState<RangeMode>(initial.mode);
+  const [dateStart, setDateStart] = React.useState<string>(initial.start);
+  const [dateEnd, setDateEnd] = React.useState<string>(initial.end);
   const [dueOutlook, setDueOutlook] = React.useState<number>(30); // Default Month
 
   // -- 1. Global Data (Always loaded via Tracker) --
@@ -38,7 +56,6 @@ export const Statistics = () => {
   }, [contextRem]);
   
   // -- 4. MONOLITHIC FETCH: Descendants + Cards --
-  // We combine these to ensure we don't have dependency race conditions
   const allCardsInContext = useRunAsync(async () => {
     if (!contextRem) {
       console.log("Stats Plugin: Context Rem not ready yet.");
@@ -55,7 +72,6 @@ export const Statistics = () => {
     const resultCards: Card[] = [];
     
     // Batch fetching cards
-    // Optimization: Parallelize fetching to speed up loading
     await Promise.all(allRems.map(async (rem) => {
       const cards = await rem.getCards();
       if (cards && cards.length > 0) {
@@ -68,6 +84,78 @@ export const Statistics = () => {
   }, [contextRem]);
 
   // -- Filtering Logic --
+  
+  const handleRangeChange = (mode: RangeMode) => {
+    setRangeMode(mode);
+    const t = new Date(); // Today
+    
+    // Helper to clone date to avoid reference issues
+    const getToday = () => new Date(t);
+
+    let start = getToday();
+    let end = getToday();
+
+    switch (mode) {
+      case 'Today':
+        // Start = Today, End = Today
+        break;
+        
+      case 'Yesterday':
+        start.setDate(t.getDate() - 1);
+        end.setDate(t.getDate() - 1);
+        break;
+
+      case 'Week': // Last 7 days
+        start.setDate(t.getDate() - 7);
+        break;
+
+      case 'This Week': // Since last Sunday
+        // t.getDay(): 0 (Sun) to 6 (Sat)
+        start.setDate(t.getDate() - t.getDay());
+        break;
+
+      case 'Last Week': // Prev Sunday to Prev Saturday
+        // End is last Saturday (Today - DayOfWeek - 1)
+        end.setDate(t.getDate() - t.getDay() - 1);
+        start = new Date(end);
+        start.setDate(end.getDate() - 6);
+        break;
+
+      case 'Month': // Last 30 days
+        start.setDate(t.getDate() - 30);
+        break;
+
+      case 'This Month': // 1st of current month to Today
+        start = new Date(t.getFullYear(), t.getMonth(), 1);
+        break;
+
+      case 'Last Month': // 1st to last day of previous month
+        start = new Date(t.getFullYear(), t.getMonth() - 1, 1);
+        end = new Date(t.getFullYear(), t.getMonth(), 0);
+        break;
+
+      case 'Year': // Last 365 days
+        start.setDate(t.getDate() - 365);
+        break;
+      
+      case 'This Year': // Jan 1st to Today
+        start = new Date(t.getFullYear(), 0, 1);
+        break;
+
+      case 'Last Year': // Previous calendar year
+        start = new Date(t.getFullYear() - 1, 0, 1);
+        end = new Date(t.getFullYear() - 1, 11, 31);
+        break;
+
+      case 'All':
+        setDateStart('');
+        setDateEnd('');
+        return;
+    }
+
+    setDateStart(start.toISOString().split('T')[0]);
+    setDateEnd(end.toISOString().split('T')[0]);
+  };
   
   // Determine if we are loading
   const isLoadingContext = contextMode === 'Current' && allCardsInContext === undefined;
@@ -131,21 +219,43 @@ export const Statistics = () => {
     color: 'var(--rn-clr-content-primary)',
   };
 
+  // -- Button Style Helper --
+  const getBtnStyle = (mode: RangeMode) => {
+    const isSelected = rangeMode === mode;
+    return {
+      backgroundColor: isSelected ? chartColor : 'var(--rn-clr-background-primary)',
+      color: isSelected ? '#fff' : 'var(--rn-clr-content-secondary)',
+      border: isSelected ? 'none' : '1px solid var(--rn-clr-border-primary)',
+      // Small shadow for unselected buttons to match "button" feel, or simple border
+      boxShadow: isSelected ? 'none' : '0 1px 2px 0 rgba(0, 0, 0, 0.05)', 
+    };
+  };
+
+  const renderPresetBtn = (label: string, mode: RangeMode) => (
+    <button
+      onClick={() => handleRangeChange(mode)}
+      className="w-full h-full rounded px-2 py-1 text-xs transition-all hover:opacity-90 flex items-center justify-center"
+      style={getBtnStyle(mode)}
+    >
+      {label}
+    </button>
+  );
+
   return <div style={{ ...containerStyle, maxHeight: "calc(90vh)" }} className="statisticsBody overflow-y-auto">
     
     {/* --- CONTROLS SECTION --- */}
-    <div className="mb-6 p-4 border rounded-md" style={boxStyle}>
+    <div className="mb-6 p-4 border rounded-md flex flex-col md:flex-row gap-6" style={boxStyle}>
       
-      {/* Context Selector */}
-      <div className="mb-4">
-        <h4 className="font-bold mb-2">Context</h4>
-        <div className="flex gap-4">
+      {/* Left Column: Context */}
+      <div className="flex-1 border-r border-gray-200 dark:border-gray-700 pr-4">
+        <h4 className="font-bold mb-2 text-sm uppercase tracking-wide opacity-70">Context</h4>
+        <div className="flex flex-col gap-2">
           <label className="flex items-center space-x-2 cursor-pointer">
             <input 
               type="radio" 
               checked={contextMode === 'Global'} 
               onChange={() => setContextMode('Global')}
-              className="form-radio text-blue-600"
+              className="form-radio"
               style={{ accentColor: chartColor }}
             />
             <span>Global</span>
@@ -155,45 +265,101 @@ export const Statistics = () => {
               type="radio" 
               checked={contextMode === 'Current'} 
               onChange={() => setContextMode('Current')}
-              className="form-radio text-blue-600"
+              className="form-radio"
               style={{ accentColor: chartColor }}
             />
-            <span>{contextMode === 'Current' ? contextRemName : "Current Rem"}</span>
+            <span className="truncate" title={contextMode === 'Current' ? contextRemName : "Current Rem"}>
+              {contextMode === 'Current' ? contextRemName : "Current Rem"}
+            </span>
           </label>
         </div>
       </div>
 
-      {/* Date Period Selector */}
-      <div>
-        <h4 className="font-bold mb-2">Period</h4>
-        <div className="flex flex-wrap gap-4 items-center">
+      {/* Right Column: Period Selection */}
+      <div className="flex-[3] flex flex-col gap-3">
+        
+        {/* Top Row: Preset Buttons */}
+        <div className="">
+          <h4 className="font-bold text-sm uppercase tracking-wide opacity-70 mb-2">Period</h4>
+          
+          {/* 5 columns, 3 rows grid */}
+          <div 
+            className="grid gap-1.5" 
+            style={{ 
+              gridTemplateColumns: 'repeat(5, 1fr)', 
+              gridTemplateRows: 'repeat(3, auto)' 
+            }}
+          >
+             {/* -- Column 1: Day -- */}
+             {/* Today spans Row 1-2 */}
+             <div style={{ gridColumn: '1', gridRow: '1 / 3' }}>
+               {renderPresetBtn('Today', 'Today')}
+             </div>
+             {/* Yesterday Row 3 */}
+             <div style={{ gridColumn: '1', gridRow: '3' }}>
+               {renderPresetBtn('Yesterday', 'Yesterday')}
+             </div>
+
+             {/* -- Column 2: Week -- */}
+             <div style={{ gridColumn: '2', gridRow: '1' }}>{renderPresetBtn('Week', 'Week')}</div>
+             <div style={{ gridColumn: '2', gridRow: '2' }}>{renderPresetBtn('This Week', 'This Week')}</div>
+             <div style={{ gridColumn: '2', gridRow: '3' }}>{renderPresetBtn('Last Week', 'Last Week')}</div>
+
+             {/* -- Column 3: Month -- */}
+             <div style={{ gridColumn: '3', gridRow: '1' }}>{renderPresetBtn('Month', 'Month')}</div>
+             <div style={{ gridColumn: '3', gridRow: '2' }}>{renderPresetBtn('This Month', 'This Month')}</div>
+             <div style={{ gridColumn: '3', gridRow: '3' }}>{renderPresetBtn('Last Month', 'Last Month')}</div>
+
+             {/* -- Column 4: Year -- */}
+             <div style={{ gridColumn: '4', gridRow: '1' }}>{renderPresetBtn('Year', 'Year')}</div>
+             <div style={{ gridColumn: '4', gridRow: '2' }}>{renderPresetBtn('This Year', 'This Year')}</div>
+             <div style={{ gridColumn: '4', gridRow: '3' }}>{renderPresetBtn('Last Year', 'Last Year')}</div>
+
+             {/* -- Column 5: All -- */}
+             {/* All spans Rows 1-3 */}
+             <div style={{ gridColumn: '5', gridRow: '1 / 4' }}>
+                <button
+                  onClick={() => handleRangeChange('All')}
+                  className="w-full h-full rounded px-2 py-1 text-xs transition-all hover:opacity-90 flex items-center justify-center font-bold"
+                  style={getBtnStyle('All')}
+                >
+                  All
+                </button>
+             </div>
+          </div>
+        </div>
+
+        {/* Bottom Row: Date Inputs */}
+        <div className="flex flex-wrap gap-4 items-end mt-2">
           <div className="flex flex-col">
-            <span className="text-xs" style={{ color: 'var(--rn-clr-content-secondary)' }}>From</span>
+            <span className="text-xs opacity-70 mb-1">Start Date</span>
             <input 
               type="date" 
               value={dateStart} 
-              onChange={(e) => setDateStart(e.target.value)}
-              className="border rounded px-2 py-1 text-sm"
+              onChange={(e) => { setDateStart(e.target.value); setRangeMode('All'); }}
+              className="border rounded px-2 py-1 text-sm w-32"
               style={inputStyle}
             />
           </div>
           <div className="flex flex-col">
-            <span className="text-xs" style={{ color: 'var(--rn-clr-content-secondary)' }}>To</span>
+            <span className="text-xs opacity-70 mb-1">End Date</span>
             <input 
               type="date" 
               value={dateEnd} 
-              onChange={(e) => setDateEnd(e.target.value)}
-              className="border rounded px-2 py-1 text-sm"
+              onChange={(e) => { setDateEnd(e.target.value); setRangeMode('All'); }}
+              className="border rounded px-2 py-1 text-sm w-32"
               style={inputStyle}
             />
           </div>
-          <button 
-            onClick={() => {setDateStart(''); setDateEnd('');}}
-            className="text-xs hover:underline mt-4"
-            style={{ color: chartColor }}
-          >
-            Clear
-          </button>
+          {(dateStart || dateEnd) && (
+             <button 
+               onClick={() => handleRangeChange('All')}
+               className="text-xs hover:underline mb-2 ml-auto"
+               style={{ color: chartColor }}
+             >
+               Clear Filter
+             </button>
+          )}
         </div>
       </div>
 
@@ -295,7 +461,16 @@ function getCommonChartOptions(title: String, xaxisType: String) {
       theme: 'light',
     },
     grid: {
-      borderColor: 'var(--rn-clr-border-primary)'
+      show: true,
+      borderColor: 'var(--rn-clr-border-light-accent)',
+      strokeDashArray: 4,
+      position: 'back',
+      xaxis: {
+        lines: { show: false }
+      },
+      yaxis: {
+        lines: { show: true }
+      }
     }
   };
 }
@@ -470,6 +645,7 @@ function chart_repetionsCompounded(allCards) {
     series={[{ name: 'Total Reviews', data: series }]}
     type="area"
     width="100%"
+    height="300"
   /></div>
 }
 
