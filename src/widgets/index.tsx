@@ -14,7 +14,7 @@ async function onActivate(plugin: ReactRNPlugin) {
       dimensions: { height: 1200, width: 1000},
     }
   );
-  // A command that opens the statistics widget
+ // COMMAND 1: Open Statistics (Saves Context)
   await plugin.app.registerCommand({
     id: 'open-statistics',
     name: 'Open Statistics',
@@ -45,7 +45,7 @@ async function onActivate(plugin: ReactRNPlugin) {
     'heatmap',
     WidgetLocation.Popup,
     {
-      dimensions: { height: 'auto', width: 'auto'},
+      dimensions: { height: 800, width: 1000},
     },
   );
   //await plugin.window.openWidgetInPane('heatmap');
@@ -66,11 +66,20 @@ async function onActivate(plugin: ReactRNPlugin) {
     defaultValue: 30,
   });
 
-  // A command that opens the heatmap widget in a new pane 
+  // COMMAND 2: Open Heatmap (NOW SAVES CONTEXT TOO)
   await plugin.app.registerCommand({
     id: 'open-heatmap',
     name: 'Open Heatmap',
     action: async () => {
+      // 1. Capture Focus
+      const focusedRem = await plugin.focus.getFocusedRem();
+      
+      // 2. Save to Session (Same key as statistics for consistency)
+      await plugin.storage.setSession('statistics-context', { 
+        focusedRemId: focusedRem?._id 
+      });
+
+      // 3. Open Widget
       plugin.widget.openPopup('heatmap');
     },
   });

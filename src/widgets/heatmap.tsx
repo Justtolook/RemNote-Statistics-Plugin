@@ -1,358 +1,339 @@
-import { usePlugin, renderWidget, useTrackerPlugin, Card, CardNamespace, PluginRem, useRunAsync } from '@remnote/plugin-sdk';
+import { usePlugin, renderWidget, useTrackerPlugin, Card, useRunAsync } from '@remnote/plugin-sdk';
 import Chart from 'react-apexcharts';
+import React from 'react';
 
 const DEFAULT_heatmapColorLow = '#b3dff0';
 const DEFAULT_heatmapColorNormal = '#3362f0';
-
-var heatmapColorLow: string;
-var heatmapColorNormal: string;
-var heatmapLowUpperBound: number;
-const LIMIT = 1483225200000; // 1.1.2017 (unix timestamp in ms ex)
+const LIMIT = 1483225200000; // 1.1.2017 (unix timestamp)
 
 export const Heatmap = () => {
   const plugin = usePlugin();
   
-  var allRemsInContext;
-  var allCardsInContext;
-  var context = useTrackerPlugin (() => plugin.settings.getSetting('statistics-context'));
-  heatmapColorLow = useTrackerPlugin(() => plugin.settings.getSetting('HeatmapColorLow'));
-  heatmapColorNormal = useTrackerPlugin(() => plugin.settings.getSetting('HeatmapColorNormal'));
-  heatmapLowUpperBound = useTrackerPlugin(() => plugin.settings.getSetting('HeatmapLowUpperBound'));
-  //check if heatmapColorLow and heatmapColorNormal are valid colors, if not set them to default values
-  if (!/^#[0-9A-F]{6}$/i.test(heatmapColorLow)) {
-    heatmapColorLow = DEFAULT_heatmapColorLow;
-  }
-  if (!/^#[0-9A-F]{6}$/i.test(heatmapColorNormal)) {
-    heatmapColorNormal = DEFAULT_heatmapColorNormal;
-  }
-  var allCards: Card[] | undefined = useTrackerPlugin(
-    async (reactivePlugin) => await reactivePlugin.card.getAll()
-  );
+  // -- State Management --
+  const [contextMode, setContextMode] = React.useState<'Global' | 'Current'>('Global');
 
-  /**
-   * get the rem id of the widget context
-   */
-   const contextRemId = useRunAsync(async () => {
-    const ctx = await plugin.widget.getWidgetContext<WidgetLocation.Popup>();
-    return ctx?.focusedRemId;
+  // -- 1. Fetch Settings --
+  const colorLowSetting = useTrackerPlugin(() => plugin.settings.getSetting('HeatmapColorLow'));
+  const colorNormalSetting = useTrackerPlugin(() => plugin.settings.getSetting('HeatmapColorNormal'));
+  const lowerBoundSetting = useTrackerPlugin(() => plugin.settings.getSetting('HeatmapLowUpperBound'));
+
+  const heatmapColorLow = (colorLowSetting && /^#[0-9A-F]{6}$/i.test(colorLowSetting as string)) 
+    ? colorLowSetting as string 
+    : DEFAULT_heatmapColorLow;
+
+  const heatmapColorNormal = (colorNormalSetting && /^#[0-9A-F]{6}$/i.test(colorNormalSetting as string)) 
+    ? colorNormalSetting as string 
+    : DEFAULT_heatmapColorNormal;
+    
+  const heatmapLowUpperBound = typeof lowerBoundSetting === 'number' ? lowerBoundSetting : 30;
+
+  // -- 2. Context Logic (Session Storage) --
+  const sessionContext = useTrackerPlugin(async (reactivePlugin) => {
+    return await reactivePlugin.storage.getSession<{focusedRemId: string}>('statistics-context');
   }, []);
 
-  /**
-   * get the rem of the contextRemId
-   */
+  const contextRemId = sessionContext?.focusedRemId;
+
+  // -- 3. Context Rem Resolution --
   const contextRem = useRunAsync(async () => {
+    if (!contextRemId) return undefined;
     return await plugin.rem.findOne(contextRemId);
   }, [contextRemId]);
-  
-  allRemsInContext = useRunAsync(async () => {
-    return await contextRem?.getDescendants();
+
+  const contextRemName = useRunAsync(async () => {
+     if(!contextRemId) return "No Rem Detected";
+     if(!contextRem) return "Loading...";
+     const text = await plugin.richText.toString(contextRem.text);
+     return text && text.trim().length > 0 ? text : "Untitled Rem";
+  }, [contextRem, contextRemId]);
+
+  // -- 4. Data Fetching --
+  const allGlobalCards = useTrackerPlugin(async (reactivePlugin) => await reactivePlugin.card.getAll());
+
+  const allCardsInContext = useRunAsync(async () => {
+    if (!contextRem) return undefined;
+    const descendants = await contextRem.getDescendants();
+    const allRems = [contextRem, ...descendants];
+    const result: Card[] = [];
+    await Promise.all(allRems.map(async (r) => {
+        const cards = await r.getCards();
+        if(cards) result.push(...cards);
+    }));
+    return result;
   }, [contextRem]);
 
-
-
-  /**
-   * get all Cards from allRemsInContext, resolve the promises and store them in allCards
-   */
-    allCardsInContext = useRunAsync(async () => {
-    const result = [];
-    for (const rem of allRemsInContext || []) {
-      result.push(...(await rem.getCards()));
-    }
-    return result;
-  }, [allRemsInContext]);
-
-  if(context == "Current Rem") allCards = allCardsInContext; 
-
-
-  const repetitionsPerDay = getRepetitionsPerDayObject(allCards);
-  const daysLearned = repetitionsPerDay.length;
-  var fullArrayRepetitionsPerDay = getFullArrayRepetitionsPerDay(getRepetitionsPerDayObject(allCards));
-  var dailyAverage = getDailyAverage(fullArrayRepetitionsPerDay);
-  var longestStreak = getLongestStreak(fullArrayRepetitionsPerDay);
+  // -- 5. Select Data Source --
+  const activeCards = (contextMode === 'Current') ? allCardsInContext : allGlobalCards;
   
-    
-  /**
-   * (TBD): Another heatmap that shows the number of rem updates? per day
-   * code to initialize the necessary data: 
-   --- start ---
-   const allRem: Rem[] | undefined = useTrackerPlugin(
-    async (reactivePlugin) => await reactivePlugin.rem.getAll()
-  );
-    
-  const newRemPerDay = getNewRemPerDay(allRem);
-  const fullArrayUpdatesPerDay = getFullArrayRepetitionsPerDay(newRemPerDay);
-  --- end ---
-   * code for return statement: 
-    --- start ---
-  {renderHeatmap(categorizeDataByWeekday(fullArrayUpdatesPerDay))} 
-    --- end ---
-  */
+  // Loading check
+  const isLoading = (contextMode === 'Current' && !activeCards) || (contextMode === 'Global' && !allGlobalCards);
 
-    return <div class="heatmapBody">
-        <div><b>Context: </b>{context}</div>
-        {renderHeatmap(categorizeDataByWeekday(fullArrayRepetitionsPerDay))}
-        <p>Days learned: <b>{daysLearned}</b></p>
-        <p>Daily average of reviews: <b>{dailyAverage}</b></p>
-        <p>Longest streak: <b>{longestStreak}</b> (consecutive days with at least one repetition)</p>
+  // -- 6. Process Data --
+  const repetitionsPerDay = React.useMemo(() => {
+     return getRepetitionsPerDayObject(activeCards || []);
+  }, [activeCards]);
+
+  const fullArrayRepetitionsPerDay = React.useMemo(() => {
+     return getFullArrayRepetitionsPerDay(repetitionsPerDay);
+  }, [repetitionsPerDay]);
+
+  const daysLearned = repetitionsPerDay.length;
+  const dailyAverage = getDailyAverage(fullArrayRepetitionsPerDay);
+  const longestStreak = getLongestStreak(fullArrayRepetitionsPerDay);
+
+  // -- Styles --
+  const containerStyle = { color: 'var(--rn-clr-content-primary)' };
+  const boxStyle = { 
+    backgroundColor: 'var(--rn-clr-background-secondary)', 
+    borderColor: 'var(--rn-clr-border-primary)',
+    color: 'var(--rn-clr-content-primary)' 
+  };
+
+  return <div className="heatmapBody overflow-y-auto" style={containerStyle}>
+      
+      {/* Controls */}
+      <div className="mb-6 p-4 border rounded-md" style={boxStyle}>
+        <div className="mb-2">
+          <h4 className="font-bold mb-2">Context</h4>
+          <div className="flex gap-4">
+            <label className="flex items-center space-x-2 cursor-pointer">
+              <input 
+                type="radio" 
+                checked={contextMode === 'Global'} 
+                onChange={() => setContextMode('Global')}
+                className="form-radio text-blue-600"
+                style={{ accentColor: heatmapColorNormal }}
+              />
+              <span>Global</span>
+            </label>
+            <label className="flex items-center space-x-2 cursor-pointer">
+              <input 
+                type="radio" 
+                checked={contextMode === 'Current'} 
+                onChange={() => setContextMode('Current')}
+                className="form-radio text-blue-600"
+                style={{ accentColor: heatmapColorNormal }}
+              />
+              <span>{contextMode === 'Current' ? contextRemName : "Current Rem"}</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      {/* Content */}
+      {isLoading ? (
+        <div className="flex justify-center items-center h-40">
+          <div className="text-lg opacity-60">Loading heatmap data...</div>
+        </div>
+      ) : (
+        <>
+          {renderHeatmap(
+              categorizeDataByWeekday(fullArrayRepetitionsPerDay), 
+              heatmapColorLow, 
+              heatmapColorNormal, 
+              heatmapLowUpperBound
+          )}
+          
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+            <div className="p-2 border rounded" style={{ borderColor: 'var(--rn-clr-border-primary)' }}>
+              <div className="text-sm opacity-70">Days learned</div>
+              <div className="text-xl font-bold">{daysLearned}</div>
+            </div>
+            <div className="p-2 border rounded" style={{ borderColor: 'var(--rn-clr-border-primary)' }}>
+              <div className="text-sm opacity-70">Daily Average</div>
+              <div className="text-xl font-bold">{isNaN(dailyAverage) ? 0 : dailyAverage}</div>
+            </div>
+            <div className="p-2 border rounded" style={{ borderColor: 'var(--rn-clr-border-primary)' }}>
+              <div className="text-sm opacity-70">Longest Streak</div>
+              <div className="text-xl font-bold">{longestStreak}</div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
 }
 
-function categorizeDataByWeekday(data) {
-    //create an object where the keys are Monday to Sunday
-  //this will be used for the series in the heatmap
-  var WeekdaySeries = {"Monday": [], "Tuesday": [], "Wednesday": [], "Thursday": [], "Friday": [], "Saturday": [], "Sunday": []};
+// --- Helper Functions ---
 
-  //iterate over the data, determine the weekday based on the Unix timestamp and push the value to the corresponding weekday
+/**
+ * Organizes data into Series (Rows) for the heatmap.
+ * CRITICAL FIX: Normalizes X-values to the 'Week Start' so days stack vertically.
+ */
+function categorizeDataByWeekday(data) {
+  var WeekdaySeries = {
+    "Monday": [] as any[], "Tuesday": [] as any[], "Wednesday": [] as any[], 
+    "Thursday": [] as any[], "Friday": [] as any[], "Saturday": [] as any[], "Sunday": [] as any[]
+  };
+
   for (var i = 0; i < data.length; i++) {
-    var weekday = new Date(data[i][0]).getDay();
-    switch (weekday) {
-      case 0:
-        WeekdaySeries.Sunday.push(data[i]);
-        break;
-      case 1:
-        WeekdaySeries.Monday.push(data[i]);
-        break;
-      case 2:
-        WeekdaySeries.Tuesday.push(data[i]);
-        break;
-      case 3:
-        WeekdaySeries.Wednesday.push(data[i]);
-        break;
-      case 4:
-        WeekdaySeries.Thursday.push(data[i]);
-        break;
-      case 5:
-        WeekdaySeries.Friday.push(data[i]);
-        break;
-      case 6:
-        WeekdaySeries.Saturday.push(data[i]);
-        break;
+    const dateObj = new Date(data[i].x);
+    const dayOfWeek = dateObj.getDay(); // 0 = Sunday, 1 = Monday...
+    
+    // NORMALIZE X: Set X to the Sunday of that week to align columns
+    const diff = dateObj.getDate() - dayOfWeek; 
+    const weekStart = new Date(dateObj.setDate(diff));
+    weekStart.setHours(0,0,0,0);
+    
+    const dataPoint = {
+        x: weekStart.getTime(), // Common X for the whole week
+        y: data[i].y            // Value for the specific day
+    };
+
+    switch (dayOfWeek) {
+      case 0: WeekdaySeries.Sunday.push(dataPoint); break;
+      case 1: WeekdaySeries.Monday.push(dataPoint); break;
+      case 2: WeekdaySeries.Tuesday.push(dataPoint); break;
+      case 3: WeekdaySeries.Wednesday.push(dataPoint); break;
+      case 4: WeekdaySeries.Thursday.push(dataPoint); break;
+      case 5: WeekdaySeries.Friday.push(dataPoint); break;
+      case 6: WeekdaySeries.Saturday.push(dataPoint); break;
     }
   }
   return WeekdaySeries;
 }
 
-/**
- * renders the heatmap
- * @param data 
- * @returns 
- */
-
-function renderHeatmap(WeekdaySeries) {
-    const Heatmap = {
-        options: {
+function renderHeatmap(WeekdaySeries, colorLow, colorNormal, lowerBound) {
+    const options = {
           xaxis: {
-            type: 'datetime'
-          },
-          title: {
-            text: 'Review Heatmap',
+            type: 'datetime' as const,
+            labels: { style: { colors: 'var(--rn-clr-content-primary)' } },
+            tooltip: { enabled: false }
           },
           chart: {
-            toolbar: {
-              show: false
-            }
+            toolbar: { show: false },
+            foreColor: 'var(--rn-clr-content-primary)',
+            background: 'transparent'
           },
-          dataLabels: {
-            enabled: false
-          },
+          dataLabels: { enabled: false },
           legend: {
             show: true,
-            customLegendItems: ['Zero', 'Low', 'Normal'],
+            position: 'top' as const,
+            horizontalAlign: 'right' as const,
+            labels: { colors: 'var(--rn-clr-content-primary)' },
             markers: {
-              fillColors: ['#FFF', heatmapColorLow, heatmapColorNormal]
+              fillColors: ['var(--rn-clr-background-tertiary)', colorLow, colorNormal]
             }
           },
-          colors: [heatmapColorNormal],
+          colors: [colorNormal],
           plotOptions: {
             heatmap: {
-              shadeIntensity: 0.8,
+              shadeIntensity: 0.5,
+              radius: 2,
+              useFillColorAsStroke: false,
               colorScale: {
                 ranges: [{
                   from: 1,
-                  to: heatmapLowUpperBound,
-                  name: '< ' + heatmapLowUpperBound,
-                  color: heatmapColorLow
+                  to: lowerBound,
+                  name: 'Low',
+                  color: colorLow
+                },
+                {
+                  from: lowerBound + 1,
+                  to: 1000000,
+                  name: 'High',
+                  color: colorNormal
                 },
                 {
                   from: 0,
                   to: 0,
-                  name : 'White = Zero',
-                  color: '#ffffff'
+                  name : 'Zero',
+                  color: 'var(--rn-clr-background-tertiary)' 
                 }]
               }
             }
+          },
+          stroke: {
+            width: 1,
+            colors: ['var(--rn-clr-background-primary)']
+          },
+          tooltip: { 
+             theme: 'light',
+             x: { show: false }, // Hide week-start date in tooltip to avoid confusion
+             y: {
+                 formatter: function(val) {
+                     return val + " reviews";
+                 }
+             }
           }
-        },
-        series: [
-            {   
-                name: "Sunday",
-                data: WeekdaySeries.Sunday
-            },
-            {
-                name: "Saturday",
-                data: WeekdaySeries.Saturday
-            },
-            {
-                name: "Friday",
-                data: WeekdaySeries.Friday
-            },
-            {
-                name: "Thursday",
-                data: WeekdaySeries.Thursday
-            },
-            {
-                name: "Wednesday",
-                data: WeekdaySeries.Wednesday
-            },
-            {
-                name: "Tuesday",
-                data: WeekdaySeries.Tuesday
-            },
-            {
-                name: "Monday",
-                data: WeekdaySeries.Monday
-            }
-        ]
     };
     
-    return <div>
+    // Order determines rendering from top to bottom
+    const series = [
+            { name: "Sat", data: WeekdaySeries.Saturday },
+            { name: "Fri", data: WeekdaySeries.Friday },
+            { name: "Thu", data: WeekdaySeries.Thursday },
+            { name: "Wed", data: WeekdaySeries.Wednesday },
+            { name: "Tue", data: WeekdaySeries.Tuesday },
+            { name: "Mon", data: WeekdaySeries.Monday },
+            { name: "Sun", data: WeekdaySeries.Sunday },
+    ];
     
+    return <div className="mt-4">
     <Chart
-        options={Heatmap.options}
-        series={Heatmap.series}
+        options={options}
+        series={series}
         type="heatmap"
-        width="800"
-        height="200"
+        width="100%"
+        height="250"
     />
     </div>
 }
 
-/**
- * 
- * @param allCards 
- * @returns an object with the number of repetitions per day
- */
 function getRepetitionsPerDayObject (allCards) {
-  
+    if (!allCards || allCards.length === 0) return [];
 
-    const repetitionHistory = allCards?.map((card) => card.repetitionHistory);
+    const repetitionHistory = allCards.map((card) => card.repetitionHistory);
+    var repetitionHistoryDates = repetitionHistory
+        .filter(h => h !== undefined)
+        .map((repetition) => repetition.map((r) => r.date))
+        .flat()
+        .sort((a,b) => a - b)
+        .map((date) => new Date(date))
+        .filter((date) => !isNaN(date.getTime()) && date.getTime() > LIMIT);
   
-    var repetitionHistoryDates = repetitionHistory?.map((repetition) => repetition?.map((repetition) => repetition.date));
-  
-    //flatten the repetitionHistoryDates array
-    repetitionHistoryDates = repetitionHistoryDates?.flat();
-  
-    //sort dates in ascending order
-    repetitionHistoryDates = repetitionHistoryDates?.sort((a,b ) => a -b);;
-  
-    //convert repetitionHistoryDatesFlatSorted into an array of dates
-    repetitionHistoryDates = repetitionHistoryDates?.map((date) => new Date(date));
-  
-    //remove all NaN values from repetitionHistoryDatesFlatSortedDates
-    repetitionHistoryDates = repetitionHistoryDates?.filter((date) => !isNaN(date.getTime()));
-
-    //remove all dates before the limit
-    repetitionHistoryDates = repetitionHistoryDates?.filter((date) => date.getTime() > LIMIT);
-  
-    //group dates by day and count the number of repetitions per day
-    const repetitionHistoryDatesFlatSortedDatesGroupedByDay = repetitionHistoryDates?.reduce((r, a) => {
+    const grouped = repetitionHistoryDates.reduce((r, a) => {
       r[a.toDateString()] = ++r[a.toDateString()] || 1;
       return r;
-    }, Object.create(Object));
+    }, Object.create(null));
   
-    //convert repetitionHistoryDatesFlatSortedDatesGroupedByDay's keys into Unix timestamps and store them in an object
-    const repetitionHistoryDatesFlatSortedDatesGroupedByDayUnix = Object.keys(repetitionHistoryDatesFlatSortedDatesGroupedByDay ||{}).map((key) => {
+    return Object.keys(grouped).map((key) => {
       return {
         date: new Date(key).getTime(),
-        n: repetitionHistoryDatesFlatSortedDatesGroupedByDay[key]
+        n: grouped[key]
       }
     });
-   
-    //return Object.entries(repetitionHistoryDatesFlatSortedDatesGroupedByDay || {});
-    return repetitionHistoryDatesFlatSortedDatesGroupedByDayUnix;
 } 
 
-/**
- * 
- * @param allRem 
- * @returns an object with the number of rem updates per day
- * format: [{date: 123456789, n: 1}, {date: 123456789, n: 1}] 
- */
-function getNewRemPerDay(allRem) {
-  //reduce the the object to an array of the property updatedAt
-  const remDates = allRem?.map((rem) => rem.updatedAt);
-  //convert the array of dates into an array of Unix timestamps
-  const remDatesUnix = remDates?.map((date) => new Date(date).toDateString());
-  
-  //group the dates by day and count the number of repetitions per day
-  const remDatesGroupedByDay = remDatesUnix?.reduce((r, a) => {
-    r[a] = ++r[a] || 1;
-    return r;
-  }, Object.create(Object));
-
-  //convert remDatesGroupedByDay's keys into Unix timestamps and store them in an object
-  const remDatesGroupedByDayUnix = Object.keys(remDatesGroupedByDay ||{}).map((key) => {
-    return {
-      date: new Date(key).getTime(),
-      n: remDatesGroupedByDay[key]
-    }
-  });
-
-  //remove entries where date is NaN
-  const remDatesGroupedByDayUnixFiltered = remDatesGroupedByDayUnix?.filter((entry) => !isNaN(entry.date));
-
-  //sort the array by date
-  remDatesGroupedByDayUnixFiltered?.sort((a,b) => a.date - b.date);
-
-
-
-  return remDatesGroupedByDayUnixFiltered
-}
-  
-  /**
-   * 
-   * @returns Array[][]
-   * Format: [UnixTimespamp,nRepetitions] 
-   */
 function getFullArrayRepetitionsPerDay(data) {
-    //var data = getRepetitionsPerDayObject(allCards);
-  
+    if (!data || data.length === 0) return [];
     
-    //sort data by date in ascending order
-    var dataSorted = data?.sort((a,b) => a.date - b.date);
+    var dataSorted = [...data].sort((a,b) => a.date - b.date);
 
+    var firstDate = dataSorted[0].date;
+    var lastDate = dataSorted[dataSorted.length - 1].date;
   
-    //get the first and last date
-    var firstDate = dataSorted.at(0)?.date;
-    var lastDate = dataSorted.at(-1)?.date;
-  
-    //create an object with with all days between firstDate and lastDate in the format of Unix timestamps
     var allDays = {};
     for (var d = new Date(firstDate); d <= new Date(lastDate); d.setDate(d.getDate() + 1)) {
       allDays[d.getTime()] = 0;
     }
   
-    //iterate over dataSorted and add the repetitions to allDays
-    dataSorted?.forEach((item) => {
+    dataSorted.forEach((item) => {
       allDays[item.date] = item.n;
     });
   
-    
-  
-    return Object.keys(allDays).map((key) => [Number(key), allDays[key]]);
+    // Return explicit {x, y} objects for ApexCharts
+    return Object.keys(allDays).map((key) => ({
+        x: Number(key), 
+        y: allDays[key]
+    }));
 }
 
-
-/**
- * 
- * @param data (FullArrayRepetitionsPerDay)
- * @returns number (longest streak in days)
- */
 function getLongestStreak(data) {
+  if (!data || data.length === 0) return 0;
   var streak = 0;
   var longestStreak = 0;
   for (var i = 0; i < data.length; i++) {
-    if (data[i][1] > 0) {
+    if (data[i].y > 0) { // Note: accessing .y property now
       streak++;
     } else {
       if (streak > longestStreak) {
@@ -361,23 +342,17 @@ function getLongestStreak(data) {
       streak = 0;
     }
   }
+  if (streak > longestStreak) longestStreak = streak;
   return longestStreak;
-  
 }
 
-/**
- * 
- * @param data (FullArrayRepetitionsPerDay)
- * @returns number (daily average)
- */
 function getDailyAverage(data) {
+  if (!data || data.length === 0) return 0;
   var sum = 0;
   for (var i = 0; i < data.length; i++) {
-    sum += data[i][1];
+    sum += data[i].y; // Note: accessing .y property now
   }
   return Math.round(sum / data.length);
 }
-
-
 
 renderWidget(Heatmap);
