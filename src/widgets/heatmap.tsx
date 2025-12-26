@@ -1,358 +1,471 @@
-import { usePlugin, renderWidget, useTracker, Card, CardNamespace, Rem, useRunAsync } from '@remnote/plugin-sdk';
+import { usePlugin, renderWidget, useTrackerPlugin, Card, useRunAsync } from '@remnote/plugin-sdk';
 import Chart from 'react-apexcharts';
+import React from 'react';
 
 const DEFAULT_heatmapColorLow = '#b3dff0';
-const DEFAULT_heatmapColorNormal = '#3362f0';
-
-var heatmapColorLow: string;
-var heatmapColorNormal: string;
-var heatmapLowUpperBound: number;
-const LIMIT = 1483225200000; // 1.1.2017 (unix timestamp in ms ex)
+const DEFAULT_heatmapColorHigh = '#1302d1';
+const LIMIT = 1483225200000; // 1.1.2017 (unix timestamp)
 
 export const Heatmap = () => {
   const plugin = usePlugin();
   
-  var allRemsInContext;
-  var allCardsInContext;
-  var context = useTracker (() => plugin.settings.getSetting('statistics-context'));
-  heatmapColorLow = useTracker(() => plugin.settings.getSetting('HeatmapColorLow'));
-  heatmapColorNormal = useTracker(() => plugin.settings.getSetting('HeatmapColorNormal'));
-  heatmapLowUpperBound = useTracker(() => plugin.settings.getSetting('HeatmapLowUpperBound'));
-  //check if heatmapColorLow and heatmapColorNormal are valid colors, if not set them to default values
-  if (!/^#[0-9A-F]{6}$/i.test(heatmapColorLow)) {
-    heatmapColorLow = DEFAULT_heatmapColorLow;
-  }
-  if (!/^#[0-9A-F]{6}$/i.test(heatmapColorNormal)) {
-    heatmapColorNormal = DEFAULT_heatmapColorNormal;
-  }
-  var allCards: Card[] | undefined = useTracker(
-    async (reactivePlugin) => await reactivePlugin.card.getAll()
-  );
+  // -- State Management --
+  const [contextMode, setContextMode] = React.useState<'Global' | 'Current'>('Global');
+  
+  // Initialize with Current Year
+  const today = new Date();
+  const startOfYear = new Date(today.getFullYear(), 0, 1);
+  
+  // UPDATED: Added 'Last Year' to state type
+  const [rangeMode, setRangeMode] = React.useState<'Week' | 'Month' | 'Year' | 'Last Year' | 'All'>('Year');
+  const [dateStart, setDateStart] = React.useState<string>(startOfYear.toISOString().split('T')[0]);
+  const [dateEnd, setDateEnd] = React.useState<string>(today.toISOString().split('T')[0]);
 
-  /**
-   * get the rem id of the widget context
-   */
-   const contextRemId = useRunAsync(async () => {
-    const ctx = await plugin.widget.getWidgetContext<WidgetLocation.Popup>();
-    return ctx?.focusedRemId;
+  // -- 1. Fetch Settings --
+  const colorLowSetting = useTrackerPlugin(() => plugin.settings.getSetting('HeatmapColorLow'));
+  const colorHighSetting = useTrackerPlugin(() => plugin.settings.getSetting('HeatmapColorHigh'));
+  const lowerBoundSetting = useTrackerPlugin(() => plugin.settings.getSetting('HeatmapTarget'));
+
+  const heatmapColorLow = (colorLowSetting && /^#[0-9A-F]{6}$/i.test(colorLowSetting as string)) 
+    ? colorLowSetting as string 
+    : DEFAULT_heatmapColorLow;
+
+  const heatmapColorHigh = (colorHighSetting && /^#[0-9A-F]{6}$/i.test(colorHighSetting as string)) 
+    ? colorHighSetting as string 
+    : DEFAULT_heatmapColorHigh;
+    
+  const heatmapTarget = (lowerBoundSetting !== undefined && lowerBoundSetting !== null)
+    ? Number(lowerBoundSetting) 
+    : 30;
+
+  // -- 2. Calculate Medium Category --
+  // Midpoint is half of the upper bound (e.g. if bound is 30, midpoint is 15)
+  const heatmapMidPoint = Math.max(1, Math.round(heatmapTarget / 2));
+  
+  // Create intermediate color
+  const heatmapColorMedium = React.useMemo(() => {
+    return interpolateColor(heatmapColorLow, heatmapColorHigh, 0.5);
+  }, [heatmapColorLow, heatmapColorHigh]);
+
+  // -- 3. Context Logic --
+  const sessionContext = useTrackerPlugin(async (reactivePlugin) => {
+    return await reactivePlugin.storage.getSession<{focusedRemId: string}>('statistics-context');
   }, []);
 
-  /**
-   * get the rem of the contextRemId
-   */
+  const contextRemId = sessionContext?.focusedRemId;
+
   const contextRem = useRunAsync(async () => {
+    if (!contextRemId) return undefined;
     return await plugin.rem.findOne(contextRemId);
   }, [contextRemId]);
-  
-  allRemsInContext = useRunAsync(async () => {
-    return await contextRem?.getDescendants();
+
+  const contextRemName = useRunAsync(async () => {
+     if(!contextRemId) return "No Rem Detected";
+     if(!contextRem) return "Loading...";
+     const text = await plugin.richText.toString(contextRem.text);
+     return text && text.trim().length > 0 ? text : "Untitled Rem";
+  }, [contextRem, contextRemId]);
+
+  // -- 4. Data Fetching --
+  const allGlobalCards = useRunAsync(async () => {
+    console.log("Heatmap: Fetching all global cards...");
+    const cards = await plugin.card.getAll();
+    console.log(`Heatmap: Fetched ${cards?.length || 0} global cards.`);
+    return cards;
+  }, []);
+
+  const allCardsInContext = useRunAsync(async () => {
+    if (!contextRem) return undefined;
+    console.log(`Heatmap: Fetching context cards for ${contextRem._id}...`);
+    const descendants = await contextRem.getDescendants();
+    const allRems = [contextRem, ...descendants];
+    const result: Card[] = [];
+    await Promise.all(allRems.map(async (r) => {
+        const cards = await r.getCards();
+        if(cards) result.push(...cards);
+    }));
+    console.log(`Heatmap: Fetched ${result.length} context cards.`);
+    return result;
   }, [contextRem]);
 
+  // -- 5. Select Data Source --
+  const activeCards = (contextMode === 'Current') ? allCardsInContext : allGlobalCards;
+  const isLoading = (contextMode === 'Current' && !activeCards) || (contextMode === 'Global' && !allGlobalCards);
 
+  // -- 6. Process & Filter Data --
+  const handleRangeChange = (mode: 'Week' | 'Month' | 'Year' | 'Last Year' | 'All') => {
+    setRangeMode(mode);
+    const t = new Date();
+    
+    // Default End Date is today
+    let end = new Date();
+    let start = new Date();
 
-  /**
-   * get all Cards from allRemsInContext, resolve the promises and store them in allCards
-   */
-    allCardsInContext = useRunAsync(async () => {
-    const result = [];
-    for (const rem of allRemsInContext || []) {
-      result.push(...(await rem.getCards()));
+    if (mode === 'Week') {
+      start.setDate(t.getDate() - 7);
+    } else if (mode === 'Month') {
+      start.setDate(t.getDate() - 30);
+    } else if (mode === 'Year') {
+      start.setDate(t.getDate() - 365);
+    } else if (mode === 'Last Year') {
+      // Previous Calendar Year (e.g. Jan 1 to Dec 31 of last year)
+      start = new Date(t.getFullYear() - 1, 0, 1); // Jan 1st prev year
+      end = new Date(t.getFullYear() - 1, 11, 31); // Dec 31st prev year
+    } else {
+      // All Time
+      setDateStart('');
+      setDateEnd('');
+      return;
     }
-    return result;
-  }, [allRemsInContext]);
 
-  if(context == "Current Rem") allCards = allCardsInContext; 
+    setDateStart(start.toISOString().split('T')[0]);
+    setDateEnd(end.toISOString().split('T')[0]);
+  };
 
+  const filteredData = React.useMemo(() => {
+    if (!activeCards) return [];
+    const startTs = dateStart ? new Date(dateStart).getTime() : 0;
+    const endTs = dateEnd ? new Date(dateEnd).getTime() + (24 * 60 * 60 * 1000) : Infinity;
 
-  const repetitionsPerDay = getRepetitionsPerDayObject(allCards);
-  const daysLearned = repetitionsPerDay.length;
-  var fullArrayRepetitionsPerDay = getFullArrayRepetitionsPerDay(getRepetitionsPerDayObject(allCards));
-  var dailyAverage = getDailyAverage(fullArrayRepetitionsPerDay);
-  var longestStreak = getLongestStreak(fullArrayRepetitionsPerDay);
-  
-    
-  /**
-   * (TBD): Another heatmap that shows the number of rem updates? per day
-   * code to initialize the necessary data: 
-   --- start ---
-   const allRem: Rem[] | undefined = useTracker(
-    async (reactivePlugin) => await reactivePlugin.rem.getAll()
-  );
-    
-  const newRemPerDay = getNewRemPerDay(allRem);
-  const fullArrayUpdatesPerDay = getFullArrayRepetitionsPerDay(newRemPerDay);
-  --- end ---
-   * code for return statement: 
-    --- start ---
-  {renderHeatmap(categorizeDataByWeekday(fullArrayUpdatesPerDay))} 
-    --- end ---
-  */
+    return getRepetitionsPerDayOptimized(activeCards, startTs, endTs);
+  }, [activeCards, dateStart, dateEnd]);
 
-    return <div class="heatmapBody">
-        <div><b>Context: </b>{context}</div>
-        {renderHeatmap(categorizeDataByWeekday(fullArrayRepetitionsPerDay))}
-        <p>Days learned: <b>{daysLearned}</b></p>
-        <p>Daily average of reviews: <b>{dailyAverage}</b></p>
-        <p>Longest streak: <b>{longestStreak}</b> (consecutive days with at least one repetition)</p>
+  const daysLearned = filteredData.filter(d => d.y > 0).length;
+  const dailyAverage = getDailyAverage(filteredData);
+  const longestStreak = getLongestStreak(filteredData);
+
+  // -- Styles --
+  const containerStyle = { color: 'var(--rn-clr-content-primary)' };
+  const boxStyle = { 
+    backgroundColor: 'var(--rn-clr-background-secondary)', 
+    borderColor: 'var(--rn-clr-border-primary)',
+    color: 'var(--rn-clr-content-primary)' 
+  };
+  const inputStyle = {
+    backgroundColor: 'var(--rn-clr-background-primary)',
+    borderColor: 'var(--rn-clr-border-primary)',
+    color: 'var(--rn-clr-content-primary)',
+  };
+
+  return <div className="heatmapBody overflow-y-auto" style={containerStyle}>
+      
+      {/* Controls Container */}
+      <div className="mb-6 p-4 border rounded-md flex flex-col md:flex-row gap-6" style={boxStyle}>
+        
+        {/* Left Column: Context */}
+        <div className="flex-1 border-r border-gray-200 dark:border-gray-700 pr-4">
+          <h4 className="font-bold mb-2 text-sm uppercase tracking-wide opacity-70">Context</h4>
+          <div className="flex flex-col gap-2">
+            <label className="flex items-center space-x-2 cursor-pointer">
+              <input 
+                type="radio" 
+                checked={contextMode === 'Global'} 
+                onChange={() => setContextMode('Global')}
+                className="form-radio"
+                style={{ accentColor: '#3362f0' }}
+              />
+              <span>Global</span>
+            </label>
+            <label className="flex items-center space-x-2 cursor-pointer">
+              <input 
+                type="radio" 
+                checked={contextMode === 'Current'} 
+                onChange={() => setContextMode('Current')}
+                className="form-radio"
+                style={{ accentColor: '#3362f0' }}
+              />
+              <span className="truncate" title={contextMode === 'Current' ? contextRemName : "Current Rem"}>
+                {contextMode === 'Current' ? contextRemName : "Current Rem"}
+              </span>
+            </label>
+          </div>
+        </div>
+
+        {/* Right Column: Period Selection */}
+        <div className="flex-[2] flex flex-col gap-3">
+          
+          {/* Top Row: Preset Buttons */}
+          <div className="flex items-center justify-between">
+            <h4 className="font-bold text-sm uppercase tracking-wide opacity-70">Period</h4>
+            <div className="flex gap-1 text-xs bg-opacity-50 p-1 rounded" style={{ backgroundColor: 'var(--rn-clr-background-primary)' }}>
+              {['Week', 'Month', 'Year', 'Last Year', 'All'].map((m) => (
+                <button
+                  key={m}
+                  onClick={() => handleRangeChange(m as any)}
+                  className={`px-3 py-1 rounded transition-colors`}
+                  style={rangeMode === m 
+                    ? { backgroundColor: '#3362f0', color: '#fff' }
+                    : { color: 'var(--rn-clr-content-secondary)' }
+                  }
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Bottom Row: Date Inputs */}
+          <div className="flex flex-wrap gap-4 items-end">
+            <div className="flex flex-col">
+              <span className="text-xs opacity-70 mb-1">Start Date</span>
+              <input 
+                type="date" 
+                value={dateStart} 
+                onChange={(e) => { setDateStart(e.target.value); setRangeMode('All'); }}
+                className="border rounded px-2 py-1 text-sm w-36"
+                style={inputStyle}
+              />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-xs opacity-70 mb-1">End Date</span>
+              <input 
+                type="date" 
+                value={dateEnd} 
+                onChange={(e) => { setDateEnd(e.target.value); setRangeMode('All'); }}
+                className="border rounded px-2 py-1 text-sm w-36"
+                style={inputStyle}
+              />
+            </div>
+            {(dateStart || dateEnd) && (
+               <button 
+                 onClick={() => handleRangeChange('All')}
+                 className="text-xs hover:underline mb-2 ml-auto"
+                 style={{ color: '#3362f0' }}
+               >
+                 Clear Filter
+               </button>
+            )}
+          </div>
+        </div>
+
+      </div>
+
+      {/* Content */}
+      {isLoading ? (
+        <div className="flex justify-center items-center h-40">
+          <div className="text-lg opacity-60">Loading heatmap data...</div>
+        </div>
+      ) : (
+        <>
+          {renderHeatmap(
+              categorizeDataByWeekday(filteredData), 
+              heatmapColorLow, 
+              heatmapColorMedium, 
+              heatmapColorHigh, 
+              heatmapMidPoint,
+              heatmapTarget
+          )}
+          
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+            <div className="p-2 border rounded" style={{ borderColor: 'var(--rn-clr-border-primary)' }}>
+              <div className="text-sm opacity-70">Days learned</div>
+              <div className="text-xl font-bold">{daysLearned}</div>
+            </div>
+            <div className="p-2 border rounded" style={{ borderColor: 'var(--rn-clr-border-primary)' }}>
+              <div className="text-sm opacity-70">Daily Average</div>
+              <div className="text-xl font-bold">{isNaN(dailyAverage) ? 0 : dailyAverage}</div>
+            </div>
+            <div className="p-2 border rounded" style={{ borderColor: 'var(--rn-clr-border-primary)' }}>
+              <div className="text-sm opacity-70">Longest Streak</div>
+              <div className="text-xl font-bold">{longestStreak}</div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
 }
 
-function categorizeDataByWeekday(data) {
-    //create an object where the keys are Monday to Sunday
-  //this will be used for the series in the heatmap
-  var WeekdaySeries = {"Monday": [], "Tuesday": [], "Wednesday": [], "Thursday": [], "Friday": [], "Saturday": [], "Sunday": []};
+// --- Helper Functions ---
 
-  //iterate over the data, determine the weekday based on the Unix timestamp and push the value to the corresponding weekday
+/** * Interpolates between two hex colors.
+ * Factor 0.5 returns the midpoint color.
+ */
+function interpolateColor(color1: string, color2: string, factor: number = 0.5): string {
+  if (!/^#[0-9A-F]{6}$/i.test(color1) || !/^#[0-9A-F]{6}$/i.test(color2)) {
+    return color1; 
+  }
+  const r1 = parseInt(color1.substring(1, 3), 16);
+  const g1 = parseInt(color1.substring(3, 5), 16);
+  const b1 = parseInt(color1.substring(5, 7), 16);
+
+  const r2 = parseInt(color2.substring(1, 3), 16);
+  const g2 = parseInt(color2.substring(3, 5), 16);
+  const b2 = parseInt(color2.substring(5, 7), 16);
+
+  const r = Math.round(r1 + factor * (r2 - r1));
+  const g = Math.round(g1 + factor * (g2 - g1));
+  const b = Math.round(b1 + factor * (b2 - b1));
+
+  return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+}
+
+function getRepetitionsPerDayOptimized(allCards: Card[], startLimit: number, endLimit: number) {
+  console.log(`Heatmap: Processing ${allCards.length} cards...`);
+  const dailyCounts = new Map<string, number>();
+  let minTs = Infinity;
+  let maxTs = -Infinity;
+
+  for (let i = 0; i < allCards.length; i++) {
+    const history = allCards[i].repetitionHistory;
+    if (!history) continue;
+    
+    for (let j = 0; j < history.length; j++) {
+      const ts = history[j].date;
+      if (ts < startLimit || ts > endLimit) continue;
+      if (ts <= LIMIT) continue;
+
+      if (ts < minTs) minTs = ts;
+      if (ts > maxTs) maxTs = ts;
+
+      const dayKey = new Date(ts).toDateString();
+      const current = dailyCounts.get(dayKey) || 0;
+      dailyCounts.set(dayKey, current + 1);
+    }
+  }
+
+  if (dailyCounts.size === 0) return [];
+
+  const finalStart = (startLimit === 0) ? minTs : startLimit;
+  const finalEnd = (endLimit === Infinity) ? maxTs : endLimit;
+
+  const result: {x: number, y: number}[] = [];
+  const current = new Date(finalStart);
+  const end = new Date(finalEnd);
+  current.setHours(0,0,0,0);
+  
+  while (current <= end) {
+    const key = current.toDateString();
+    result.push({
+      x: current.getTime(),
+      y: dailyCounts.get(key) || 0
+    });
+    current.setDate(current.getDate() + 1);
+  }
+
+  return result;
+}
+
+function categorizeDataByWeekday(data) {
+  var WeekdaySeries = {
+    "Monday": [] as any[], "Tuesday": [] as any[], "Wednesday": [] as any[], 
+    "Thursday": [] as any[], "Friday": [] as any[], "Saturday": [] as any[], "Sunday": [] as any[]
+  };
+
   for (var i = 0; i < data.length; i++) {
-    var weekday = new Date(data[i][0]).getDay();
+    const dataPoint = data[i];
+    var weekday = new Date(dataPoint.x).getDay();
+
     switch (weekday) {
-      case 0:
-        WeekdaySeries.Sunday.push(data[i]);
-        break;
-      case 1:
-        WeekdaySeries.Monday.push(data[i]);
-        break;
-      case 2:
-        WeekdaySeries.Tuesday.push(data[i]);
-        break;
-      case 3:
-        WeekdaySeries.Wednesday.push(data[i]);
-        break;
-      case 4:
-        WeekdaySeries.Thursday.push(data[i]);
-        break;
-      case 5:
-        WeekdaySeries.Friday.push(data[i]);
-        break;
-      case 6:
-        WeekdaySeries.Saturday.push(data[i]);
-        break;
+      case 0: WeekdaySeries.Sunday.push(dataPoint); break;
+      case 1: WeekdaySeries.Monday.push(dataPoint); break;
+      case 2: WeekdaySeries.Tuesday.push(dataPoint); break;
+      case 3: WeekdaySeries.Wednesday.push(dataPoint); break;
+      case 4: WeekdaySeries.Thursday.push(dataPoint); break;
+      case 5: WeekdaySeries.Friday.push(dataPoint); break;
+      case 6: WeekdaySeries.Saturday.push(dataPoint); break;
     }
   }
   return WeekdaySeries;
 }
 
-/**
- * renders the heatmap
- * @param data 
- * @returns 
- */
-
-function renderHeatmap(WeekdaySeries) {
-    const Heatmap = {
-        options: {
+function renderHeatmap(WeekdaySeries, colorLow, colorMedium, colorHigh, midPoint, lowerBound) {
+    const options = {
           xaxis: {
-            type: 'datetime'
-          },
-          title: {
-            text: 'Review Heatmap',
+            type: 'datetime' as const,
+            labels: { style: { colors: 'var(--rn-clr-content-primary)' } },
+            tooltip: { enabled: false }
           },
           chart: {
-            toolbar: {
-              show: false
-            }
+            zoom: { enabled: false }, 
+            toolbar: { show: false },
+            foreColor: 'var(--rn-clr-content-primary)',
+            background: 'transparent'
           },
-          dataLabels: {
-            enabled: false
-          },
+          dataLabels: { enabled: false },
           legend: {
             show: true,
-            customLegendItems: ['Zero', 'Low', 'Normal'],
-            markers: {
-              fillColors: ['#FFF', heatmapColorLow, heatmapColorNormal]
-            }
+            position: 'top' as const,
+            horizontalAlign: 'right' as const,
+            labels: { colors: 'var(--rn-clr-content-primary)' },
+            // Removed manual 'markers' to allow ApexCharts to sync legend colors with ranges
           },
-          colors: [heatmapColorNormal],
+          colors: [colorHigh],
           plotOptions: {
             heatmap: {
-              shadeIntensity: 0.8,
+              shadeIntensity: 0.5,
+              radius: 2,
+              useFillColorAsStroke: false,
               colorScale: {
                 ranges: [{
-                  from: 1,
-                  to: heatmapLowUpperBound,
-                  name: '< ' + heatmapLowUpperBound,
-                  color: heatmapColorLow
-                },
-                {
                   from: 0,
                   to: 0,
-                  name : 'White = Zero',
-                  color: '#ffffff'
-                }]
+                  color: 'var(--rn-clr-background-tertiary)',
+                  name : '0',
+                },
+                {
+                  from: 1,
+                  to: midPoint,
+                  color: colorLow,
+                  name: `Low: 1 - ${midPoint}`,
+                },
+                {
+                  from: midPoint + 1,
+                  to: lowerBound,
+                  color: colorMedium,
+                  name: `Medium: ${midPoint + 1} - ${lowerBound}`,
+                },
+                {
+                  from: lowerBound + 1,
+                  to: 1000000,
+                  color: colorHigh,
+                  name: `High: > ${lowerBound}`,
+                }
+              ]
               }
             }
+          },
+          stroke: {
+            width: 1,
+            colors: ['var(--rn-clr-background-primary)']
+          },
+          tooltip: { 
+             theme: 'light',
+             x: { show: true, format: 'dd MMM yyyy' },
+             y: {
+                 formatter: function(val) {
+                     return val + " reviews";
+                 }
+             }
           }
-        },
-        series: [
-            {   
-                name: "Sunday",
-                data: WeekdaySeries.Sunday
-            },
-            {
-                name: "Saturday",
-                data: WeekdaySeries.Saturday
-            },
-            {
-                name: "Friday",
-                data: WeekdaySeries.Friday
-            },
-            {
-                name: "Thursday",
-                data: WeekdaySeries.Thursday
-            },
-            {
-                name: "Wednesday",
-                data: WeekdaySeries.Wednesday
-            },
-            {
-                name: "Tuesday",
-                data: WeekdaySeries.Tuesday
-            },
-            {
-                name: "Monday",
-                data: WeekdaySeries.Monday
-            }
-        ]
     };
     
-    return <div>
+    const series = [
+            { name: "Sunday", data: WeekdaySeries.Sunday },
+            { name: "Saturday", data: WeekdaySeries.Saturday },
+            { name: "Friday", data: WeekdaySeries.Friday },
+            { name: "Thursday", data: WeekdaySeries.Thursday },
+            { name: "Wednesday", data: WeekdaySeries.Wednesday },
+            { name: "Tuesday", data: WeekdaySeries.Tuesday },
+            { name: "Monday", data: WeekdaySeries.Monday }
+    ];
     
+    return <div className="mt-4">
     <Chart
-        options={Heatmap.options}
-        series={Heatmap.series}
+        options={options}
+        series={series}
         type="heatmap"
-        width="800"
-        height="200"
+        width="100%"
+        height="250"
     />
     </div>
 }
 
-/**
- * 
- * @param allCards 
- * @returns an object with the number of repetitions per day
- */
-function getRepetitionsPerDayObject (allCards) {
-  
-
-    const repetitionHistory = allCards?.map((card) => card.repetitionHistory);
-  
-    var repetitionHistoryDates = repetitionHistory?.map((repetition) => repetition?.map((repetition) => repetition.date));
-  
-    //flatten the repetitionHistoryDates array
-    repetitionHistoryDates = repetitionHistoryDates?.flat();
-  
-    //sort dates in ascending order
-    repetitionHistoryDates = repetitionHistoryDates?.sort((a,b ) => a -b);;
-  
-    //convert repetitionHistoryDatesFlatSorted into an array of dates
-    repetitionHistoryDates = repetitionHistoryDates?.map((date) => new Date(date));
-  
-    //remove all NaN values from repetitionHistoryDatesFlatSortedDates
-    repetitionHistoryDates = repetitionHistoryDates?.filter((date) => !isNaN(date.getTime()));
-
-    //remove all dates before the limit
-    repetitionHistoryDates = repetitionHistoryDates?.filter((date) => date.getTime() > LIMIT);
-  
-    //group dates by day and count the number of repetitions per day
-    const repetitionHistoryDatesFlatSortedDatesGroupedByDay = repetitionHistoryDates?.reduce((r, a) => {
-      r[a.toDateString()] = ++r[a.toDateString()] || 1;
-      return r;
-    }, Object.create(Object));
-  
-    //convert repetitionHistoryDatesFlatSortedDatesGroupedByDay's keys into Unix timestamps and store them in an object
-    const repetitionHistoryDatesFlatSortedDatesGroupedByDayUnix = Object.keys(repetitionHistoryDatesFlatSortedDatesGroupedByDay ||{}).map((key) => {
-      return {
-        date: new Date(key).getTime(),
-        n: repetitionHistoryDatesFlatSortedDatesGroupedByDay[key]
-      }
-    });
-   
-    //return Object.entries(repetitionHistoryDatesFlatSortedDatesGroupedByDay || {});
-    return repetitionHistoryDatesFlatSortedDatesGroupedByDayUnix;
-} 
-
-/**
- * 
- * @param allRem 
- * @returns an object with the number of rem updates per day
- * format: [{date: 123456789, n: 1}, {date: 123456789, n: 1}] 
- */
-function getNewRemPerDay(allRem) {
-  //reduce the the object to an array of the property updatedAt
-  const remDates = allRem?.map((rem) => rem.updatedAt);
-  //convert the array of dates into an array of Unix timestamps
-  const remDatesUnix = remDates?.map((date) => new Date(date).toDateString());
-  
-  //group the dates by day and count the number of repetitions per day
-  const remDatesGroupedByDay = remDatesUnix?.reduce((r, a) => {
-    r[a] = ++r[a] || 1;
-    return r;
-  }, Object.create(Object));
-
-  //convert remDatesGroupedByDay's keys into Unix timestamps and store them in an object
-  const remDatesGroupedByDayUnix = Object.keys(remDatesGroupedByDay ||{}).map((key) => {
-    return {
-      date: new Date(key).getTime(),
-      n: remDatesGroupedByDay[key]
-    }
-  });
-
-  //remove entries where date is NaN
-  const remDatesGroupedByDayUnixFiltered = remDatesGroupedByDayUnix?.filter((entry) => !isNaN(entry.date));
-
-  //sort the array by date
-  remDatesGroupedByDayUnixFiltered?.sort((a,b) => a.date - b.date);
-
-
-
-  return remDatesGroupedByDayUnixFiltered
-}
-  
-  /**
-   * 
-   * @returns Array[][]
-   * Format: [UnixTimespamp,nRepetitions] 
-   */
-function getFullArrayRepetitionsPerDay(data) {
-    //var data = getRepetitionsPerDayObject(allCards);
-  
-    
-    //sort data by date in ascending order
-    var dataSorted = data?.sort((a,b) => a.date - b.date);
-
-  
-    //get the first and last date
-    var firstDate = dataSorted.at(0)?.date;
-    var lastDate = dataSorted.at(-1)?.date;
-  
-    //create an object with with all days between firstDate and lastDate in the format of Unix timestamps
-    var allDays = {};
-    for (var d = new Date(firstDate); d <= new Date(lastDate); d.setDate(d.getDate() + 1)) {
-      allDays[d.getTime()] = 0;
-    }
-  
-    //iterate over dataSorted and add the repetitions to allDays
-    dataSorted?.forEach((item) => {
-      allDays[item.date] = item.n;
-    });
-  
-    
-  
-    return Object.keys(allDays).map((key) => [Number(key), allDays[key]]);
-}
-
-
-/**
- * 
- * @param data (FullArrayRepetitionsPerDay)
- * @returns number (longest streak in days)
- */
 function getLongestStreak(data) {
+  if (!data || data.length === 0) return 0;
   var streak = 0;
   var longestStreak = 0;
   for (var i = 0; i < data.length; i++) {
-    if (data[i][1] > 0) {
+    if (data[i].y > 0) {
       streak++;
     } else {
       if (streak > longestStreak) {
@@ -361,23 +474,17 @@ function getLongestStreak(data) {
       streak = 0;
     }
   }
+  if (streak > longestStreak) longestStreak = streak;
   return longestStreak;
-  
 }
 
-/**
- * 
- * @param data (FullArrayRepetitionsPerDay)
- * @returns number (daily average)
- */
 function getDailyAverage(data) {
+  if (!data || data.length === 0) return 0;
   var sum = 0;
   for (var i = 0; i < data.length; i++) {
-    sum += data[i][1];
+    sum += data[i].y;
   }
   return Math.round(sum / data.length);
 }
-
-
 
 renderWidget(Heatmap);
