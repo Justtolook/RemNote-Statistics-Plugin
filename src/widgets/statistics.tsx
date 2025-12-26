@@ -242,6 +242,8 @@ export const Statistics = () => {
   );
 
   return <div style={{ ...containerStyle, maxHeight: "calc(90vh)" }} className="statisticsBody overflow-y-auto">
+
+    <div className="font-bold text-lg">History</div>
     
     {/* --- CONTROLS SECTION --- */}
     <div className="mb-6 p-4 border rounded-md flex flex-col md:flex-row gap-6" style={boxStyle}>
@@ -387,11 +389,22 @@ export const Statistics = () => {
           'Buttons pressed',
           buttonsPressedTotal
         )}
-        
-        {/* 3. Due Cards */}
+
+        {/* 3. Reviews Count */}
+        {chart_column(
+          getNumberCardsGroupedByRepetitions(filteredCards), 
+          'category', 
+          'Number of cards grouped by number of reviews')}
+
+        {/* 4. Compounded Reviews */}
+        {chart_repetionsCompounded(filteredCards)}
+
+        <hr></hr>
+
+        {/* 5. Due Cards */}
         <div className="mt-8 mb-2">
           <div className="flex justify-between items-center mb-2">
-            <div className="font-bold text-lg">Due Cards Outlook</div>
+            <div className="font-bold text-lg">Outlook</div>
             <div className="flex gap-2 text-sm p-1 rounded" style={{ backgroundColor: 'var(--rn-clr-background-secondary)' }}>
               {[
                 { label: 'Week', val: 7 },
@@ -419,15 +432,6 @@ export const Statistics = () => {
           `Due in next ${dueOutlook} days (Total: ${dueCardsTotal})`, 
           dueCardsCumulative
         )}
-
-        {/* 4. Reviews Count */}
-        {chart_column(
-          getNumberCardsGroupedByRepetitions(filteredCards), 
-          'category', 
-          'Number of cards grouped by number of reviews')}
-
-        {/* 5. Compounded Reviews */}
-        {chart_repetionsCompounded(filteredCards)}
       </>
     )}
     
