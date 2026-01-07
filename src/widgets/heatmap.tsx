@@ -1,6 +1,7 @@
-import { usePlugin, renderWidget, useTrackerPlugin, Card, useRunAsync } from '@remnote/plugin-sdk';
+import { usePlugin, renderWidget, useTrackerPlugin, Card, useRunAsync, PluginRem } from '@remnote/plugin-sdk';
 import Chart from 'react-apexcharts';
 import React from 'react';
+import { getComprehensiveContextRems } from '../lib/utils';
 
 const DEFAULT_heatmapColorLow = '#b3dff0';
 const DEFAULT_heatmapColorHigh = '#1302d1';
@@ -11,6 +12,8 @@ export const Heatmap = () => {
   
   // -- State Management --
   const [contextMode, setContextMode] = React.useState<'Global' | 'Current'>('Global');
+  // NEW: Local state for Scope Mode
+  const [scopeMode, setScopeMode] = React.useState<'descendants' | 'comprehensive'>('descendants');
   
   // Initialize with Current Year
   const today = new Date();
@@ -76,17 +79,40 @@ export const Heatmap = () => {
 
   const allCardsInContext = useRunAsync(async () => {
     if (!contextRem) return undefined;
-    console.log(`Heatmap: Fetching context cards for ${contextRem._id}...`);
-    const descendants = await contextRem.getDescendants();
-    const allRems = [contextRem, ...descendants];
+    
+    let allRems: PluginRem[] = [];
+
+    if (scopeMode === 'descendants') {
+        console.log(`Heatmap: Fetching simple descendants for ${contextRem._id}...`);
+        const descendants = await contextRem.getDescendants();
+        allRems = [contextRem, ...descendants];
+    } else {
+        console.log(`Heatmap: Fetching comprehensive context for ${contextRem._id}...`);
+        allRems = await getComprehensiveContextRems(contextRem);
+    }
+    
     const result: Card[] = [];
-    await Promise.all(allRems.map(async (r) => {
-        const cards = await r.getCards();
-        if(cards) result.push(...cards);
-    }));
-    console.log(`Heatmap: Fetched ${result.length} context cards.`);
+    const BATCH_THRESHOLD = 100;
+
+    // 2. Fetch Cards (Optimized)
+    if (allRems.length > BATCH_THRESHOLD) {
+        console.log(`Heatmap: Scope too large (${allRems.length} Rems). Switching to bulk fetch.`);
+        const allSystemCards = await plugin.card.getAll();
+        const scopeRemIds = new Set(allRems.map(r => r._id));
+        
+        const filtered = allSystemCards.filter(c => scopeRemIds.has(c.remId));
+        result.push(...filtered);
+    } else {
+        console.log(`Heatmap: Small scope (${allRems.length} Rems). Using iterative fetch.`);
+        await Promise.all(allRems.map(async (r) => {
+            const cards = await r.getCards();
+            if(cards) result.push(...cards);
+        }));
+    }
+    
+    console.log(`Heatmap: Fetched ${result.length} context cards from ${allRems.length} rems (Mode: ${scopeMode}).`);
     return result;
-  }, [contextRem]);
+  }, [contextRem, scopeMode]);
 
   // -- 5. Select Data Source --
   const activeCards = (contextMode === 'Current') ? allCardsInContext : allGlobalCards;
@@ -153,7 +179,7 @@ export const Heatmap = () => {
       <div className="mb-6 p-4 border rounded-md flex flex-col md:flex-row gap-6" style={boxStyle}>
         
         {/* Left Column: Context */}
-        <div className="flex-1 border-r border-gray-200 dark:border-gray-700 pr-4">
+        <div className="flex-1 border-r border-gray-200 dark:border-gray-700 pr-4 flex flex-col">
           <h4 className="font-bold mb-2 text-sm uppercase tracking-wide opacity-70">Context</h4>
           <div className="flex flex-col gap-2">
             <label className="flex items-center space-x-2 cursor-pointer">
@@ -179,6 +205,55 @@ export const Heatmap = () => {
               </span>
             </label>
           </div>
+          
+          {/* Scope Selection (Conditional) */}
+          {contextMode === 'Current' && (
+             <div className="mt-2 pl-6 flex flex-col gap-1">
+                <div className="text-xs opacity-50 uppercase tracking-wide mb-1">Scope</div>
+                <label className="flex items-center space-x-2 cursor-pointer text-xs">
+                    <input 
+                        type="radio" 
+                        checked={scopeMode === 'descendants'} 
+                        onChange={() => setScopeMode('descendants')}
+                        className="form-radio h-3 w-3"
+                        style={{ accentColor: '#3362f0' }}
+                    />
+                    <span>Descendants Only</span>
+                </label>
+                <label className="flex items-center space-x-2 cursor-pointer text-xs">
+                    <input 
+                        type="radio" 
+                        checked={scopeMode === 'comprehensive'} 
+                        onChange={() => setScopeMode('comprehensive')}
+                        className="form-radio h-3 w-3"
+                        style={{ accentColor: '#3362f0' }}
+                    />
+                    <span>Comprehensive</span>
+                    {/* Info Icon with Tooltip */}
+                    <div 
+                      className="opacity-50 hover:opacity-100 cursor-help transition-opacity"
+                      title="Descendants, Rems that reference or are tagged with this rem and its descendants, Sources, Portals and Table Viewes"
+                    >
+                      <svg 
+                        xmlns="http://www.w3.org/2000/svg" 
+                        width="15" 
+                        height="15" 
+                        viewBox="0 0 24 24" 
+                        fill="none" 
+                        stroke="currentColor" 
+                        strokeWidth="2" 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round"
+                      >
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="16" x2="12" y2="12"></line>
+                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                      </svg>
+                    </div>
+                </label>
+             </div>
+          )}
+
         </div>
 
         {/* Right Column: Period Selection */}
@@ -236,6 +311,7 @@ export const Heatmap = () => {
                </button>
             )}
           </div>
+
         </div>
 
       </div>
@@ -256,7 +332,12 @@ export const Heatmap = () => {
               heatmapTarget
           )}
           
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-4 text-center">
+            {/* Total Flashcards Count */}
+            <div className="p-2 border rounded" style={{ borderColor: 'var(--rn-clr-border-primary)' }}>
+                <div className="text-sm opacity-70">Total Flashcards</div>
+                <div className="text-xl font-bold"> {activeCards ? activeCards.length.toLocaleString() : '-'}</div>
+            </div>
             <div className="p-2 border rounded" style={{ borderColor: 'var(--rn-clr-border-primary)' }}>
               <div className="text-sm opacity-70">Days learned</div>
               <div className="text-xl font-bold">{daysLearned}</div>

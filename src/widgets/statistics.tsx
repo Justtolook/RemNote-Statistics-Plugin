@@ -1,6 +1,7 @@
-import { usePlugin, renderWidget, useTrackerPlugin, Card, useRunAsync, WidgetLocation } from '@remnote/plugin-sdk';
+import { usePlugin, renderWidget, useTrackerPlugin, Card, useRunAsync, WidgetLocation, PluginRem } from '@remnote/plugin-sdk';
 import Chart from 'react-apexcharts';
 import React from 'react';
+import { getComprehensiveContextRems } from '../lib/utils';
 
 /* Constants */
 var chartColor = '#3362f0';
@@ -28,10 +29,20 @@ export const Statistics = () => {
 
   // -- State Management --
   const [contextMode, setContextMode] = React.useState<'Global' | 'Current'>('Global');
+  // NEW: Local state for Scope Mode (defaulting to descendants)
+  const [scopeMode, setScopeMode] = React.useState<'descendants' | 'comprehensive'>('descendants');
+  
   const [rangeMode, setRangeMode] = React.useState<RangeMode>(initial.mode);
   const [dateStart, setDateStart] = React.useState<string>(initial.start);
   const [dateEnd, setDateEnd] = React.useState<string>(initial.end);
   const [dueOutlook, setDueOutlook] = React.useState<number>(30); // Default Month
+
+  // -- Settings --
+  const chartColorSettings = useTrackerPlugin(() => plugin.settings.getSetting('statistics-chart-color'));
+
+  if(chartColorSettings && /^#[0-9A-F]{6}$/i.test(chartColorSettings)) {
+    chartColor = chartColorSettings;
+  }
 
   // -- 1. Global Data (Always loaded via Tracker) --
   const allGlobalCards = getAllCards();
@@ -55,33 +66,55 @@ export const Statistics = () => {
      return text && text.trim().length > 0 ? text : "Untitled Rem";
   }, [contextRem]);
   
-  // -- 4. MONOLITHIC FETCH: Descendants + Cards --
+  // -- 4. DATA FETCH --
   const allCardsInContext = useRunAsync(async () => {
     if (!contextRem) {
       console.log("Stats Plugin: Context Rem not ready yet.");
-      return undefined; // Return undefined to signal 'loading'
+      return undefined;
     }
 
-    console.log(`Stats Plugin: Fetching descendants for ${contextRem._id}...`);
-    const descendants = await contextRem.getDescendants();
-    
-    // Include the context Rem itself + all descendants
-    const allRems = [contextRem, ...descendants];
-    console.log(`Stats Plugin: Found ${allRems.length} Rems in context (Self + Descendants).`);
+    let allRems: PluginRem[] = [];
 
+    // 1. Gather Rems based on scope
+    if (scopeMode === 'descendants') {
+        console.log(`Stats Plugin: Fetching simple descendants for ${contextRem._id}...`);
+        const descendants = await contextRem.getDescendants();
+        allRems = [contextRem, ...descendants];
+    } else {
+        console.log(`Stats Plugin: Fetching comprehensive context for ${contextRem._id}...`);
+        allRems = await getComprehensiveContextRems(contextRem);
+    }
+    
+    // 2. Optimized Card Fetching Strategy
     const resultCards: Card[] = [];
-    
-    // Batch fetching cards
-    await Promise.all(allRems.map(async (rem) => {
-      const cards = await rem.getCards();
-      if (cards && cards.length > 0) {
-        resultCards.push(...cards);
-      }
-    }));
+    const BATCH_THRESHOLD = 200; // Threshold to switch to bulk fetching
 
-    console.log(`Stats Plugin: Found ${resultCards.length} total cards in context.`);
+    if (allRems.length > BATCH_THRESHOLD) {
+        // STRATEGY A: Bulk fetch all cards (1 Request) -> Filter locally
+        // Much faster for large scopes (e.g. 650 Rems) to avoid N+1 request overhead
+        console.log(`Stats Plugin: Scope too large (${allRems.length} Rems) for individual fetching. Switching to bulk fetch strategy.`);
+        
+        const allSystemCards = await plugin.card.getAll();
+        const scopeRemIds = new Set(allRems.map(r => r._id));
+        
+        // Filter cards that belong to the Rems in our scope
+        const filtered = allSystemCards.filter(c => scopeRemIds.has(c.remId));
+        resultCards.push(...filtered);
+    } else {
+        // STRATEGY B: Individual fetch (N Requests)
+        // Faster for very small scopes (avoids loading the entire global card database)
+        console.log(`Stats Plugin: Small scope (${allRems.length} Rems). Using iterative fetching.`);
+        await Promise.all(allRems.map(async (rem) => {
+          const cards = await rem.getCards();
+          if (cards && cards.length > 0) {
+            resultCards.push(...cards);
+          }
+        }));
+    }
+
+    console.log(`Stats Plugin: Found ${resultCards.length} total cards in context (Mode: ${scopeMode}).`);
     return resultCards;
-  }, [contextRem]);
+  }, [contextRem, scopeMode]);
 
   // -- Filtering Logic --
   
@@ -184,13 +217,6 @@ export const Statistics = () => {
     });
   }, [activeCardsSource, dateStart, dateEnd]);
 
-  
-  // -- Settings / Styles --
-  const chartColorSettings = useTrackerPlugin(() => plugin.settings.getSetting('statistics-chart-color'));
-  if(chartColorSettings && /^#[0-9A-F]{6}$/i.test(chartColorSettings)) {
-    chartColor = chartColorSettings;
-  }
-
   // -- Prepared Data --
   const buttonsPressedDataObj = getNumberRepetitionsGroupedByScore(filteredCards);
   const buttonsPressedTotal = Object.values(buttonsPressedDataObj).reduce((a:any, b:any) => a + b, 0) as number;
@@ -249,7 +275,7 @@ export const Statistics = () => {
     <div className="mb-6 p-4 border rounded-md flex flex-col md:flex-row gap-6" style={boxStyle}>
       
       {/* Left Column: Context */}
-      <div className="flex-1 border-r border-gray-200 dark:border-gray-700 pr-4">
+      <div className="flex-1 border-r border-gray-200 dark:border-gray-700 pr-4 flex flex-col">
         <h4 className="font-bold mb-2 text-sm uppercase tracking-wide opacity-70">Context</h4>
         <div className="flex flex-col gap-2">
           <label className="flex items-center space-x-2 cursor-pointer">
@@ -274,6 +300,62 @@ export const Statistics = () => {
               {contextMode === 'Current' ? contextRemName : "Current Rem"}
             </span>
           </label>
+        </div>
+        
+        {/* Scope Selection (Conditional) */}
+        {contextMode === 'Current' && (
+             <div className="mt-2 pl-6 flex flex-col gap-1">
+                <div className="text-xs opacity-50 uppercase tracking-wide mb-1">Scope</div>
+                <label className="flex items-center space-x-2 cursor-pointer text-xs">
+                    <input 
+                        type="radio" 
+                        checked={scopeMode === 'descendants'} 
+                        onChange={() => setScopeMode('descendants')}
+                        className="form-radio h-3 w-3"
+                        style={{ accentColor: chartColor }}
+                    />
+                    <span>Descendants Only</span>
+                </label>
+                <label className="flex items-center space-x-2 cursor-pointer text-xs">
+                    <input 
+                        type="radio" 
+                        checked={scopeMode === 'comprehensive'} 
+                        onChange={() => setScopeMode('comprehensive')}
+                        className="form-radio h-3 w-3"
+                        style={{ accentColor: chartColor }}
+                    />
+                    <span>Comprehensive</span>
+                    {/* Info Icon with Tooltip */}
+                    <div 
+                      className="opacity-50 hover:opacity-100 cursor-help transition-opacity"
+                      title="Descendants, Rems that reference or are tagged with this rem and its descendants, Sources, Portals and Table Viewes"
+                    >
+                      <svg 
+                        xmlns="http://www.w3.org/2000/svg" 
+                        width="15" 
+                        height="15" 
+                        viewBox="0 0 24 24" 
+                        fill="none" 
+                        stroke="currentColor" 
+                        strokeWidth="2" 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round"
+                      >
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="16" x2="12" y2="12"></line>
+                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                      </svg>
+                    </div>
+                </label>
+             </div>
+        )}
+
+        {/* Total Flashcards Count */}
+        <div className="mt-auto pt-4">
+            <div className="text-xs opacity-70 uppercase tracking-wide">Total Flashcards</div>
+            <div className="text-xl font-bold">
+                {activeCardsSource ? activeCardsSource.length.toLocaleString() : '-'}
+            </div>
         </div>
       </div>
 
@@ -377,10 +459,34 @@ export const Statistics = () => {
       </div>
     ) : (
       <>
+
         {/* 1. Retention Rate */}
-        <div className="mb-2"><b>Retention rate: </b> {(retentionRate(buttonsPressedDataObj))}</div>
-        
-        <div className="vSpacing-1rem"/>
+        <div className="mb-2 flex items-center">
+          <b>Retention rate: </b> 
+          <span className="mx-1">{(retentionRate(buttonsPressedDataObj))}</span>
+          
+          {/* Info Icon with Tooltip */}
+          <div 
+            className="opacity-50 hover:opacity-100 cursor-help transition-opacity"
+            title="The percentage of reviews where you successfully recalled the answer (Score > Forgot).&#010;Calculation: (Hard + Good + Easy) / Total Reviews"
+          >
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              width="15" 
+              height="15" 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              stroke="currentColor" 
+              strokeWidth="2" 
+              strokeLinecap="round" 
+              strokeLinejoin="round"
+            >
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+          </div>
+        </div>
 
         {/* 2. Buttons Pressed */}
         {chart_column_with_percent(
