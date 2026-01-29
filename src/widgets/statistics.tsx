@@ -286,27 +286,44 @@ export const Statistics = () => {
       className="statisticsBody"
     >
       {/* Header - Fixed */}
-      <div style={{ flex: '0 0 auto', padding: '1rem 1rem 0.5rem 1rem' }}>
-        <div className="font-bold text-2xl mb-4">Statistics Dashboard</div>
+      <div style={{ flex: '0 0 auto', padding: '1.5rem 1.5rem 1rem 1.5rem', borderBottom: '1px solid var(--rn-clr-border-primary)' }}>
+        <div className="flex items-center gap-3">
+          <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: chartColor }}>
+            <line x1="18" y1="20" x2="18" y2="10"></line>
+            <line x1="12" y1="20" x2="12" y2="4"></line>
+            <line x1="6" y1="20" x2="6" y2="14"></line>
+          </svg>
+          <div>
+            <div className="font-bold text-2xl" style={{ color: 'var(--rn-clr-content-primary)' }}>Statistics Dashboard</div>
+            <div className="text-sm opacity-60">Comprehensive flashcard analytics and review insights</div>
+          </div>
+        </div>
       </div>
       
       {/* Scrollable Content Area */}
       <div 
+        className="custom-scroll"
         style={{ 
           flex: '1 1 0',
           height: '100vh',
           overflowY: 'auto',
           overflowX: 'hidden',
-          padding: '0 1rem 1rem 1rem',
+          padding: '1.5rem',
           minHeight: 0
         }}
       >
         {/* --- CONTROLS SECTION --- */}
-        <div className="mb-6 p-4 border rounded-md flex flex-col md:flex-row gap-6" style={boxStyle}>
+        <div className="mb-8 p-6 border rounded-lg shadow-sm fade-in" style={{ ...boxStyle, borderRadius: '12px' }}>
         
+        <div className="flex flex-col md:flex-row gap-6">
         {/* Left Column: Context */}
-        <div className="flex-1 border-r border-gray-200 dark:border-gray-700 pr-4 flex flex-col">
-          <h4 className="font-bold mb-2 text-sm uppercase tracking-wide opacity-70">Context</h4>
+        <div className="flex-1 md:border-r pr-6 flex flex-col" style={{ borderColor: 'var(--rn-clr-border-primary)' }}>
+          <div className="flex items-center gap-2 mb-3">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}>
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+            </svg>
+            <h4 className="font-bold text-sm uppercase tracking-wide opacity-70">Context</h4>
+          </div>
           <div className="flex flex-col gap-2">
             <label className="flex items-center space-x-2 cursor-pointer">
               <input 
@@ -379,18 +396,27 @@ export const Statistics = () => {
           )}
 
           <div className="mt-auto pt-4">
-              <div className="text-xs opacity-70 uppercase tracking-wide">Total Flashcards</div>
-              <div className="text-xl font-bold">
-                  {activeCardsSource ? activeCardsSource.length.toLocaleString() : '-'}
+              <div className="p-3 rounded-lg" style={{ backgroundColor: 'var(--rn-clr-background-tertiary)' }}>
+                <div className="text-xs opacity-70 uppercase tracking-wide mb-1">Total Flashcards</div>
+                <div className="text-2xl font-bold" style={{ color: chartColor }}>
+                    {activeCardsSource ? activeCardsSource.length.toLocaleString() : '-'}
+                </div>
               </div>
           </div>
         </div>
 
         {/* Right Column: Period Selection */}
         <div className="flex-[3] flex flex-col gap-3">
-          
-          <div className="">
-            <h4 className="font-bold text-sm uppercase tracking-wide opacity-70 mb-2">Period</h4>
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}>
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+              </svg>
+              <h4 className="font-bold text-sm uppercase tracking-wide opacity-70">Period</h4>
+            </div>
             
             <div 
               className="grid gap-1.5" 
@@ -462,22 +488,66 @@ export const Statistics = () => {
             )}
           </div>
         </div>
-
+        </div>
       </div>
 
       {/* --- CONTENT --- */}
       
       {isLoadingContext ? (
-        <div className="flex justify-center items-center h-40">
-          <div className="text-lg animate-pulse" style={{ color: 'var(--rn-clr-content-secondary)' }}>
+        <div className="flex flex-col justify-center items-center h-64 fade-in">
+          <div className="loading-pulse mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: chartColor }}>
+              <line x1="12" y1="2" x2="12" y2="6"></line>
+              <line x1="12" y1="18" x2="12" y2="22"></line>
+              <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line>
+              <line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line>
+              <line x1="2" y1="12" x2="6" y2="12"></line>
+              <line x1="18" y1="12" x2="22" y2="12"></line>
+              <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line>
+              <line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line>
+            </svg>
+          </div>
+          <div className="text-lg font-medium" style={{ color: 'var(--rn-clr-content-primary)' }}>
             Loading context data...
+          </div>
+          <div className="text-sm opacity-60 mt-2">
+            Analyzing flashcards in the selected scope
+          </div>
+        </div>
+      ) : !activeCardsSource || activeCardsSource.length === 0 ? (
+        <div className="flex flex-col justify-center items-center h-64 fade-in">
+          <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--rn-clr-content-tertiary)', marginBottom: '1rem' }}>
+            <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+            <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+          </svg>
+          <div className="text-xl font-medium mb-2" style={{ color: 'var(--rn-clr-content-primary)' }}>
+            No flashcards found
+          </div>
+          <div className="text-sm opacity-60 text-center max-w-md">
+            {contextMode === 'Global' 
+              ? 'Start creating flashcards to see your statistics here.' 
+              : 'No flashcards found in the selected context. Try switching to Global mode or selecting a different Rem.'}
           </div>
         </div>
       ) : (
         <>
           {/* SECTION 1: HEATMAP */}
-          <div className="mb-8">
-            <div className="font-bold text-xl mb-4">Review Heatmap</div>
+          <div className="mb-10 fade-in">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 rounded-lg" style={{ backgroundColor: 'var(--rn-clr-background-secondary)' }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: chartColor }}>
+                  <rect x="3" y="3" width="7" height="7"></rect>
+                  <rect x="14" y="3" width="7" height="7"></rect>
+                  <rect x="14" y="14" width="7" height="7"></rect>
+                  <rect x="3" y="14" width="7" height="7"></rect>
+                </svg>
+              </div>
+              <div>
+                <div className="font-bold text-xl">Review Heatmap</div>
+                <div className="text-sm opacity-60">Daily review activity visualization</div>
+              </div>
+            </div>
+            <div className="chart-container">
             {renderHeatmap(
               categorizeDataByWeekday(heatmapData), 
               heatmapColorLow, 
@@ -486,74 +556,133 @@ export const Statistics = () => {
               heatmapMidPoint,
               heatmapTarget
             )}
+            </div>
             
-            <div className="mt-5 grid grid-cols-4 gap-5 text-center">
-              <div className="p-3 border rounded" style={{ borderColor: 'var(--rn-clr-border-primary)' }}>
-                <div className="text-sm opacity-70">Days Learned</div>
-                <div className="text-2xl font-bold">{daysLearned}</div>
+            <div className="mt-6 grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="stat-card p-4 border rounded-lg text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-primary)' }}>
+                <div className="text-xs uppercase tracking-wide opacity-60 mb-2">Days Learned</div>
+                <div className="text-3xl font-bold" style={{ color: chartColor }}>{daysLearned}</div>
               </div>
-              <div className="p-3 border rounded" style={{ borderColor: 'var(--rn-clr-border-primary)' }}>
-                <div className="text-sm opacity-70">Daily Average</div>
-                <div className="text-2xl font-bold">{isNaN(dailyAverage) ? 0 : dailyAverage}</div>
+              <div className="stat-card p-4 border rounded-lg text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-primary)' }}>
+                <div className="text-xs uppercase tracking-wide opacity-60 mb-2">Daily Average</div>
+                <div className="text-3xl font-bold" style={{ color: chartColor }}>{isNaN(dailyAverage) ? 0 : dailyAverage}</div>
               </div>
-              <div className="p-3 border rounded" style={{ borderColor: 'var(--rn-clr-border-primary)' }}>
-                <div className="text-sm opacity-70">Longest Streak</div>
-                <div className="text-2xl font-bold">{longestStreak}</div>
-              </div>
-              <div className="p-3 border rounded" style={{ borderColor: 'var(--rn-clr-border-primary)' }}>
-                <div className="text-sm opacity-70">Retention Rate</div>
-                <div 
-                className="opacity-50 hover:opacity-100 cursor-help transition-opacity"
-                title="The percentage of reviews where you successfully recalled the answer (Score > Forgot).&#010;Calculation: (Hard + Good + Easy) / Total Reviews">
-                  <svg 
-                    xmlns="http://www.w3.org/2000/svg" 
-                    width="15" 
-                    height="15" 
-                    viewBox="0 0 24 24" 
-                    fill="none" 
-                    stroke="currentColor" 
-                    strokeWidth="2" 
-                    strokeLinecap="round" 
-                    strokeLinejoin="round"
-                  >
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <line x1="12" y1="16" x2="12" y2="12"></line>
-                  <line x1="12" y1="8" x2="12.01" y2="8"></line>
-                </svg>
-                </div>
-                <div className="text-2xl font-bold">{retentionRate(buttonsPressedDataObj)}</div>
+              <div className="stat-card p-4 border rounded-lg text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-primary)' }}>
+                <div className="text-xs uppercase tracking-wide opacity-60 mb-2">Longest Streak</div>
+                <div className="text-3xl font-bold" style={{ color: chartColor }}>{longestStreak} days</div>
               </div>
             </div>
           </div>
 
-          <hr className="my-8" style={{ borderColor: 'var(--rn-clr-border-primary)' }} />
+          <div className="section-divider"></div>
 
           {/* SECTION 2: REVIEW STATISTICS */}
-          <div className="mb-8">
-            <div className="font-bold text-xl mb-4">Review Statistics</div>
+          <div className="mb-10 fade-in">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 rounded-lg" style={{ backgroundColor: 'var(--rn-clr-background-secondary)' }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: chartColor }}>
+                  <path d="M3 3v18h18"></path>
+                  <path d="M18 17V9"></path>
+                  <path d="M13 17V5"></path>
+                  <path d="M8 17v-3"></path>
+                </svg>
+              </div>
+              <div>
+                <div className="font-bold text-xl">Review Statistics</div>
+                <div className="text-sm opacity-60">Performance metrics and review distribution</div>
+              </div>
+            </div>
 
-            {chart_column_with_percent(
-              buttonsPressedData, 
-              'category', 
-              'Buttons pressed',
-              buttonsPressedTotal
-            )}
+            {/* Metrics Grid */}
+            <div className="mb-8 grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="stat-card p-4 border rounded-lg text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-primary)' }}>
+                <div className="text-xs uppercase tracking-wide opacity-60 mb-2 flex items-center justify-center gap-1">
+                  Retention Rate
+                  <div 
+                    className="opacity-50 hover:opacity-100 cursor-help transition-opacity"
+                    title="The percentage of reviews where you successfully recalled the answer (Score > Forgot).&#010;Calculation: (Hard + Good + Easy) / Total Reviews"
+                  >
+                    <svg 
+                      xmlns="http://www.w3.org/2000/svg" 
+                      width="14" 
+                      height="14" 
+                      viewBox="0 0 24 24" 
+                      fill="none" 
+                      stroke="currentColor" 
+                      strokeWidth="2" 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round"
+                    >
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <line x1="12" y1="16" x2="12" y2="12"></line>
+                      <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                    </svg>
+                  </div>
+                </div>
+                <div className="text-3xl font-bold" style={{ color: chartColor }}>
+                  {retentionRate(buttonsPressedDataObj) === "No Data" 
+                    ? "N/A" 
+                    : (parseFloat(retentionRate(buttonsPressedDataObj)) * 100).toFixed(0) + "%"}
+                </div>
+              </div>
+              <div className="stat-card p-4 border rounded-lg text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-primary)' }}>
+                <div className="text-xs uppercase tracking-wide opacity-60 mb-2">Total Reviews</div>
+                <div className="text-3xl font-bold" style={{ color: chartColor }}>{buttonsPressedTotal.toLocaleString()}</div>
+              </div>
+              <div className="stat-card p-4 border rounded-lg text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-primary)' }}>
+                <div className="text-xs uppercase tracking-wide opacity-60 mb-2">Forgot</div>
+                <div className="text-3xl font-bold" style={{ color: '#ef4444' }}>{(buttonsPressedDataObj.Forgot || 0).toLocaleString()}</div>
+              </div>
+              <div className="stat-card p-4 border rounded-lg text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-primary)' }}>
+                <div className="text-xs uppercase tracking-wide opacity-60 mb-2">Remembered</div>
+                <div className="text-3xl font-bold" style={{ color: '#10b981' }}>
+                  {((buttonsPressedDataObj.Hard || 0) + (buttonsPressedDataObj.Good || 0) + (buttonsPressedDataObj.Easy || 0)).toLocaleString()}
+                </div>
+              </div>
+            </div>
 
-            {chart_column(
-              getNumberCardsGroupedByRepetitions(filteredCards), 
-              'category', 
-              'Number of cards grouped by number of reviews')}
+            <div className="space-y-6">
 
-            {chart_repetionsCompounded(filteredCards)}
+            <div className="chart-container">
+              {chart_column_with_percent(
+                buttonsPressedData, 
+                'category', 
+                'Buttons pressed',
+                buttonsPressedTotal
+              )}
+            </div>
+
+            <div className="chart-container">
+              {chart_column(
+                getNumberCardsGroupedByRepetitions(filteredCards), 
+                'category', 
+                'Number of cards grouped by number of reviews')}
+            </div>
+
+            <div className="chart-container">
+              {chart_repetionsCompounded(filteredCards)}
+            </div>
+            </div>
           </div>
 
-          <hr className="my-8" style={{ borderColor: 'var(--rn-clr-border-primary)' }} />
+          <div className="section-divider"></div>
 
           {/* SECTION 3: OUTLOOK */}
-          <div className="mb-8">
-            <div className="flex justify-between items-center mb-4">
-              <div className="font-bold text-xl">Outlook</div>
-              <div className="flex gap-2 text-sm p-1 rounded" style={{ backgroundColor: 'var(--rn-clr-background-secondary)' }}>
+          <div className="mb-8 fade-in">
+            <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg" style={{ backgroundColor: 'var(--rn-clr-background-secondary)' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: chartColor }}>
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                  </svg>
+                </div>
+                <div>
+                  <div className="font-bold text-xl">Outlook</div>
+                  <div className="text-sm opacity-60">Upcoming due cards forecast</div>
+                </div>
+              </div>
+              <div className="flex gap-2 text-sm p-1.5 rounded-lg" style={{ backgroundColor: 'var(--rn-clr-background-secondary)', border: '1px solid var(--rn-clr-border-primary)' }}>
                 {[
                   { label: 'Week', val: 7 },
                   { label: 'Month', val: 30 },
@@ -562,9 +691,9 @@ export const Statistics = () => {
                   <button
                     key={opt.label}
                     onClick={() => setDueOutlook(opt.val)}
-                    className={`px-3 py-1 rounded transition-colors`}
+                    className="px-4 py-2 rounded-md transition-all smooth-transition font-medium"
                     style={dueOutlook === opt.val 
-                      ? { backgroundColor: chartColor, color: '#fff' }
+                      ? { backgroundColor: chartColor, color: '#fff', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
                       : { color: 'var(--rn-clr-content-secondary)' }
                     }
                   >
@@ -574,11 +703,18 @@ export const Statistics = () => {
               </div>
             </div>
 
-            {chart_column_due(
-              dueCardsDataRaw, 
-              `Due in next ${dueOutlook} days (Total: ${dueCardsTotal})`, 
-              dueCardsCumulative
-            )}
+            <div className="stat-card p-4 border rounded-lg mb-6 text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-secondary)' }}>
+              <div className="text-sm opacity-70 mb-1">Total Due Cards (Next {dueOutlook} Days)</div>
+              <div className="text-4xl font-bold" style={{ color: chartColor }}>{dueCardsTotal.toLocaleString()}</div>
+            </div>
+
+            <div className="chart-container">
+              {chart_column_due(
+                dueCardsDataRaw, 
+                `Due cards per day`, 
+                dueCardsCumulative
+              )}
+            </div>
           </div>
         </>
       )}
@@ -788,7 +924,6 @@ function chart_repetionsCompounded(allCards: Card[] | undefined) {
     stroke: { colors: [chartColor], curve: 'smooth' as const },
     chart: {
       ...getCommonChartOptions('Sum of reviews over time', 'datetime').chart,
-      zoom: { enabled: true, type: 'xy' as const, autoScaleYaxis: true },
     },
     fill: { type: 'solid' as const, colors: [chartColor] },
     tooltip: { enabled: true, x: { format: 'dd MM yyyy' } },

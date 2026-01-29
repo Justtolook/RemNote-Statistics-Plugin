@@ -20,23 +20,54 @@ export function getCommonChartOptions(title: string, xaxisType: 'datetime' | 'ca
     chart: {
       foreColor: 'var(--rn-clr-content-primary)',
       fontFamily: 'inherit',
-      toolbar: { show: false }
+      toolbar: { show: false },
+      zoom: { enabled: false },
+      animations: {
+        enabled: true,
+        easing: 'easeinout',
+        speed: 800,
+        animateGradually: {
+          enabled: true,
+          delay: 150
+        },
+        dynamicAnimation: {
+          enabled: true,
+          speed: 350
+        }
+      }
     },
     title: {
       text: title,
-      style: { color: 'var(--rn-clr-content-primary)' }
+      style: { 
+        color: 'var(--rn-clr-content-primary)',
+        fontSize: '16px',
+        fontWeight: 600
+      },
+      align: 'left' as const,
+      offsetX: 0,
+      offsetY: 0
     },
     colors: [chartColor],
     xaxis: {
       type: xaxisType,
-      labels: { style: { colors: 'var(--rn-clr-content-primary)' } }
+      labels: { 
+        style: { colors: 'var(--rn-clr-content-primary)' },
+        rotate: xaxisType === 'category' ? -45 : 0,
+        rotateAlways: false
+      }
     },
     yaxis: {
       decimalsInFloat: 0,
-      labels: { style: { colors: 'var(--rn-clr-content-primary)' } }
+      labels: { 
+        style: { colors: 'var(--rn-clr-content-primary)' }
+      }
     },
     tooltip: {
       theme: 'light' as const,
+      style: {
+        fontSize: '12px',
+        fontFamily: 'inherit'
+      }
     },
     grid: {
       show: true,
@@ -48,8 +79,25 @@ export function getCommonChartOptions(title: string, xaxisType: 'datetime' | 'ca
       },
       yaxis: {
         lines: { show: true }
+      },
+      padding: {
+        top: 0,
+        right: 10,
+        bottom: 0,
+        left: 10
       }
-    }
+    },
+    responsive: [{
+      breakpoint: 768,
+      options: {
+        chart: {
+          height: 250
+        },
+        legend: {
+          position: 'bottom' as const
+        }
+      }
+    }]
   };
 }
 
@@ -90,7 +138,10 @@ export function getButtonStyle(isSelected: boolean, color: string = chartColor) 
     backgroundColor: isSelected ? color : 'var(--rn-clr-background-primary)',
     color: isSelected ? '#fff' : 'var(--rn-clr-content-secondary)',
     border: isSelected ? 'none' : '1px solid var(--rn-clr-border-primary)',
-    boxShadow: isSelected ? 'none' : '0 1px 2px 0 rgba(0, 0, 0, 0.05)', 
+    boxShadow: isSelected ? '0 2px 8px rgba(0, 0, 0, 0.15)' : '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+    fontWeight: isSelected ? 600 : 400,
+    transform: isSelected ? 'scale(1.02)' : 'scale(1)',
+    transition: 'all 0.2s ease-in-out'
   };
 }
 
