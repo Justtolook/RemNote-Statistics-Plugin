@@ -95,6 +95,25 @@ export function getCommonChartOptions(title: string, xaxisType: 'datetime' | 'ca
         },
         legend: {
           position: 'bottom' as const
+        },
+        title: {
+          style: {
+            fontSize: '14px'
+          }
+        },
+        xaxis: {
+          labels: {
+            style: {
+              fontSize: '10px'
+            }
+          }
+        },
+        yaxis: {
+          labels: {
+            style: {
+              fontSize: '10px'
+            }
+          }
         }
       }
     }]

@@ -6,12 +6,12 @@ async function onActivate(plugin: ReactRNPlugin) {
 
   // --- Statistics Dashboard Widget (Merged with Heatmap) ---
 
-  // Register statistics widget with increased height for all content
+  // Register statistics widget with responsive dimensions
   await plugin.app.registerWidget(
     'statistics',
     WidgetLocation.Popup,
     {
-      dimensions: { height: 'auto', width: 1000},
+      dimensions: { height: 'auto', width: 'auto' },
     }
   );
   

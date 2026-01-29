@@ -11,7 +11,7 @@
   },
   "description": "Statistics plugin that will give you some helpful numbers, charts and heatmap for your knowledge base.",
   "requestNative": false,
-  "enableOnMobile": false,
+  "enableOnMobile": true,
   "requiredScopes": [
     {
       "type": "All",

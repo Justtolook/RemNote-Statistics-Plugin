@@ -279,23 +279,26 @@ export const Statistics = () => {
       style={{ 
         display: 'flex',
         flexDirection: 'column',
-        height: '90%',
+        height: '100%',
+        width: '100%',
+        maxWidth: '100vw',
+        maxHeight: '100vh',
         overflow: 'hidden',
         ...containerStyle
       }} 
       className="statisticsBody"
     >
       {/* Header - Fixed */}
-      <div style={{ flex: '0 0 auto', padding: '1.5rem 1.5rem 1rem 1.5rem', borderBottom: '1px solid var(--rn-clr-border-primary)' }}>
-        <div className="flex items-center gap-3">
-          <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: chartColor }}>
+      <div style={{ flex: '0 0 auto', padding: '1rem', borderBottom: '1px solid var(--rn-clr-border-primary)' }} className="md:px-6">
+        <div className="flex items-center gap-2 md:gap-3">
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 md:w-7 md:h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: chartColor }}>
             <line x1="18" y1="20" x2="18" y2="10"></line>
             <line x1="12" y1="20" x2="12" y2="4"></line>
             <line x1="6" y1="20" x2="6" y2="14"></line>
           </svg>
           <div>
-            <div className="font-bold text-2xl" style={{ color: 'var(--rn-clr-content-primary)' }}>Statistics Dashboard</div>
-            <div className="text-sm opacity-60">Comprehensive flashcard analytics and review insights</div>
+            <div className="font-bold text-lg md:text-2xl" style={{ color: 'var(--rn-clr-content-primary)' }}>Statistics Dashboard</div>
+            <div className="text-xs md:text-sm opacity-60 hidden sm:block">Comprehensive flashcard analytics and review insights</div>
           </div>
         </div>
       </div>
@@ -308,7 +311,7 @@ export const Statistics = () => {
           height: '100vh',
           overflowY: 'auto',
           overflowX: 'hidden',
-          padding: '1.5rem',
+          padding: '1rem',
           minHeight: 0
         }}
       >
@@ -317,30 +320,30 @@ export const Statistics = () => {
         
         <div className="flex flex-col md:flex-row gap-6">
         {/* Left Column: Context */}
-        <div className="flex-1 md:border-r pr-6 flex flex-col" style={{ borderColor: 'var(--rn-clr-border-primary)' }}>
-          <div className="flex items-center gap-2 mb-3">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}>
+        <div className="flex-1 lg:border-r lg:pr-6 flex flex-col pb-4 lg:pb-0 border-b lg:border-b-0" style={{ borderColor: 'var(--rn-clr-border-primary)' }}>
+          <div className="flex items-center gap-2 mb-2 md:mb-3">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}>
               <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
             </svg>
-            <h4 className="font-bold text-sm uppercase tracking-wide opacity-70">Context</h4>
+            <h4 className="font-bold text-xs md:text-sm uppercase tracking-wide opacity-70">Context</h4>
           </div>
-          <div className="flex flex-col gap-2">
-            <label className="flex items-center space-x-2 cursor-pointer">
+          <div className="flex flex-col gap-1.5 md:gap-2">
+            <label className="flex items-center space-x-2 cursor-pointer text-sm md:text-base">
               <input 
                 type="radio" 
                 checked={contextMode === 'Global'} 
                 onChange={() => setContextMode('Global')}
-                className="form-radio"
+                className="form-radio w-4 h-4"
                 style={{ accentColor: chartColor }}
               />
               <span>Global</span>
             </label>
-            <label className="flex items-center space-x-2 cursor-pointer">
+            <label className="flex items-center space-x-2 cursor-pointer text-sm md:text-base">
               <input 
                 type="radio" 
                 checked={contextMode === 'Current'} 
                 onChange={() => setContextMode('Current')}
-                className="form-radio"
+                className="form-radio w-4 h-4"
                 style={{ accentColor: chartColor }}
               />
               <span className="truncate" title={contextMode === 'Current' ? contextRemName : "Current Rem"}>
@@ -395,10 +398,10 @@ export const Statistics = () => {
              </div>
           )}
 
-          <div className="mt-auto pt-4">
-              <div className="p-3 rounded-lg" style={{ backgroundColor: 'var(--rn-clr-background-tertiary)' }}>
+          <div className="mt-3 lg:mt-auto pt-3 lg:pt-4">
+              <div className="p-2 md:p-3 rounded-lg" style={{ backgroundColor: 'var(--rn-clr-background-tertiary)' }}>
                 <div className="text-xs opacity-70 uppercase tracking-wide mb-1">Total Flashcards</div>
-                <div className="text-2xl font-bold" style={{ color: chartColor }}>
+                <div className="text-xl md:text-2xl font-bold" style={{ color: chartColor }}>
                     {activeCardsSource ? activeCardsSource.length.toLocaleString() : '-'}
                 </div>
               </div>
@@ -406,25 +409,19 @@ export const Statistics = () => {
         </div>
 
         {/* Right Column: Period Selection */}
-        <div className="flex-[3] flex flex-col gap-3">
+        <div className="flex-[3] flex flex-col gap-2 md:gap-3">
           <div>
-            <div className="flex items-center gap-2 mb-3">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}>
+            <div className="flex items-center gap-2 mb-2 md:mb-3">
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}>
                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
                 <line x1="16" y1="2" x2="16" y2="6"></line>
                 <line x1="8" y1="2" x2="8" y2="6"></line>
                 <line x1="3" y1="10" x2="21" y2="10"></line>
               </svg>
-              <h4 className="font-bold text-sm uppercase tracking-wide opacity-70">Period</h4>
+              <h4 className="font-bold text-xs md:text-sm uppercase tracking-wide opacity-70">Period</h4>
             </div>
             
-            <div 
-              className="grid gap-1.5" 
-              style={{ 
-                gridTemplateColumns: 'repeat(5, 1fr)', 
-                gridTemplateRows: 'repeat(3, auto)' 
-              }}
-            >
+            <div className="grid gap-1 md:gap-1.5 grid-cols-3 sm:grid-cols-5">
                <div style={{ gridColumn: '1', gridRow: '1 / 3' }}>
                  {renderPresetBtn('Today', 'Today')}
                </div>
@@ -456,24 +453,24 @@ export const Statistics = () => {
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-4 items-end mt-2">
-            <div className="flex flex-col">
+          <div className="flex flex-wrap gap-2 md:gap-4 items-end mt-2">
+            <div className="flex flex-col flex-1 min-w-[120px]">
               <span className="text-xs opacity-70 mb-1">Start Date</span>
               <input 
                 type="date" 
                 value={dateStart} 
                 onChange={(e) => { setDateStart(e.target.value); setRangeMode('All'); }}
-                className="border rounded px-2 py-1 text-sm w-32"
+                className="border rounded px-2 py-1 text-sm w-full"
                 style={inputStyle}
               />
             </div>
-            <div className="flex flex-col">
+            <div className="flex flex-col flex-1 min-w-[120px]">
               <span className="text-xs opacity-70 mb-1">End Date</span>
               <input 
                 type="date" 
                 value={dateEnd} 
                 onChange={(e) => { setDateEnd(e.target.value); setRangeMode('All'); }}
-                className="border rounded px-2 py-1 text-sm w-32"
+                className="border rounded px-2 py-1 text-sm w-full"
                 style={inputStyle}
               />
             </div>
@@ -532,10 +529,10 @@ export const Statistics = () => {
       ) : (
         <>
           {/* SECTION 1: HEATMAP */}
-          <div className="mb-10 fade-in">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 rounded-lg" style={{ backgroundColor: 'var(--rn-clr-background-secondary)' }}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: chartColor }}>
+          <div className="mb-6 md:mb-10 fade-in">
+            <div className="flex items-center gap-2 md:gap-3 mb-4 md:mb-6">
+              <div className="p-1.5 md:p-2 rounded-lg" style={{ backgroundColor: 'var(--rn-clr-background-secondary)' }}>
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 md:w-6 md:h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: chartColor }}>
                   <rect x="3" y="3" width="7" height="7"></rect>
                   <rect x="14" y="3" width="7" height="7"></rect>
                   <rect x="14" y="14" width="7" height="7"></rect>
@@ -543,8 +540,8 @@ export const Statistics = () => {
                 </svg>
               </div>
               <div>
-                <div className="font-bold text-xl">Review Heatmap</div>
-                <div className="text-sm opacity-60">Daily review activity visualization</div>
+                <div className="font-bold text-lg md:text-xl">Review Heatmap</div>
+                <div className="text-xs md:text-sm opacity-60 hidden sm:block">Daily review activity visualization</div>
               </div>
             </div>
             <div className="chart-container">
@@ -577,10 +574,10 @@ export const Statistics = () => {
           <div className="section-divider"></div>
 
           {/* SECTION 2: REVIEW STATISTICS */}
-          <div className="mb-10 fade-in">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 rounded-lg" style={{ backgroundColor: 'var(--rn-clr-background-secondary)' }}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: chartColor }}>
+          <div className="mb-6 md:mb-10 fade-in">
+            <div className="flex items-center gap-2 md:gap-3 mb-4 md:mb-6">
+              <div className="p-1.5 md:p-2 rounded-lg" style={{ backgroundColor: 'var(--rn-clr-background-secondary)' }}>
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 md:w-6 md:h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: chartColor }}>
                   <path d="M3 3v18h18"></path>
                   <path d="M18 17V9"></path>
                   <path d="M13 17V5"></path>
@@ -588,15 +585,15 @@ export const Statistics = () => {
                 </svg>
               </div>
               <div>
-                <div className="font-bold text-xl">Review Statistics</div>
-                <div className="text-sm opacity-60">Performance metrics and review distribution</div>
+                <div className="font-bold text-lg md:text-xl">Review Statistics</div>
+                <div className="text-xs md:text-sm opacity-60 hidden sm:block">Performance metrics and review distribution</div>
               </div>
             </div>
 
             {/* Metrics Grid */}
-            <div className="mb-8 grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="stat-card p-4 border rounded-lg text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-primary)' }}>
-                <div className="text-xs uppercase tracking-wide opacity-60 mb-2 flex items-center justify-center gap-1">
+            <div className="mb-6 md:mb-8 grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4">
+              <div className="stat-card p-3 md:p-4 border rounded-lg text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-primary)' }}>
+                <div className="text-[10px] md:text-xs uppercase tracking-wide opacity-60 mb-1 md:mb-2 flex items-center justify-center gap-1">
                   Retention Rate
                   <div 
                     className="opacity-50 hover:opacity-100 cursor-help transition-opacity"
@@ -619,29 +616,29 @@ export const Statistics = () => {
                     </svg>
                   </div>
                 </div>
-                <div className="text-3xl font-bold" style={{ color: chartColor }}>
+                <div className="text-xl md:text-3xl font-bold" style={{ color: chartColor }}>
                   {retentionRate(buttonsPressedDataObj) === "No Data" 
                     ? "N/A" 
                     : (parseFloat(retentionRate(buttonsPressedDataObj)) * 100).toFixed(0) + "%"}
                 </div>
               </div>
-              <div className="stat-card p-4 border rounded-lg text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-primary)' }}>
-                <div className="text-xs uppercase tracking-wide opacity-60 mb-2">Total Reviews</div>
-                <div className="text-3xl font-bold" style={{ color: chartColor }}>{buttonsPressedTotal.toLocaleString()}</div>
+              <div className="stat-card p-3 md:p-4 border rounded-lg text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-primary)' }}>
+                <div className="text-[10px] md:text-xs uppercase tracking-wide opacity-60 mb-1 md:mb-2">Total Reviews</div>
+                <div className="text-xl md:text-3xl font-bold" style={{ color: chartColor }}>{buttonsPressedTotal.toLocaleString()}</div>
               </div>
-              <div className="stat-card p-4 border rounded-lg text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-primary)' }}>
-                <div className="text-xs uppercase tracking-wide opacity-60 mb-2">Forgot</div>
-                <div className="text-3xl font-bold" style={{ color: '#ef4444' }}>{(buttonsPressedDataObj.Forgot || 0).toLocaleString()}</div>
+              <div className="stat-card p-3 md:p-4 border rounded-lg text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-primary)' }}>
+                <div className="text-[10px] md:text-xs uppercase tracking-wide opacity-60 mb-1 md:mb-2">Forgot</div>
+                <div className="text-xl md:text-3xl font-bold" style={{ color: '#ef4444' }}>{(buttonsPressedDataObj.Forgot || 0).toLocaleString()}</div>
               </div>
-              <div className="stat-card p-4 border rounded-lg text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-primary)' }}>
-                <div className="text-xs uppercase tracking-wide opacity-60 mb-2">Remembered</div>
-                <div className="text-3xl font-bold" style={{ color: '#10b981' }}>
+              <div className="stat-card p-3 md:p-4 border rounded-lg text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-primary)' }}>
+                <div className="text-[10px] md:text-xs uppercase tracking-wide opacity-60 mb-1 md:mb-2">Remembered</div>
+                <div className="text-xl md:text-3xl font-bold" style={{ color: '#10b981' }}>
                   {((buttonsPressedDataObj.Hard || 0) + (buttonsPressedDataObj.Good || 0) + (buttonsPressedDataObj.Easy || 0)).toLocaleString()}
                 </div>
               </div>
             </div>
 
-            <div className="space-y-6">
+            <div className="space-y-4 md:space-y-6">
 
             <div className="chart-container">
               {chart_column_with_percent(
@@ -668,21 +665,21 @@ export const Statistics = () => {
           <div className="section-divider"></div>
 
           {/* SECTION 3: OUTLOOK */}
-          <div className="mb-8 fade-in">
-            <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 mb-6">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg" style={{ backgroundColor: 'var(--rn-clr-background-secondary)' }}>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: chartColor }}>
+          <div className="mb-6 md:mb-8 fade-in">
+            <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 md:gap-4 mb-4 md:mb-6">
+              <div className="flex items-center gap-2 md:gap-3">
+                <div className="p-1.5 md:p-2 rounded-lg" style={{ backgroundColor: 'var(--rn-clr-background-secondary)' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 md:w-6 md:h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: chartColor }}>
                     <circle cx="12" cy="12" r="10"></circle>
                     <polyline points="12 6 12 12 16 14"></polyline>
                   </svg>
                 </div>
                 <div>
-                  <div className="font-bold text-xl">Outlook</div>
-                  <div className="text-sm opacity-60">Upcoming due cards forecast</div>
+                  <div className="font-bold text-lg md:text-xl">Outlook</div>
+                  <div className="text-xs md:text-sm opacity-60 hidden sm:block">Upcoming due cards forecast</div>
                 </div>
               </div>
-              <div className="flex gap-2 text-sm p-1.5 rounded-lg" style={{ backgroundColor: 'var(--rn-clr-background-secondary)', border: '1px solid var(--rn-clr-border-primary)' }}>
+              <div className="flex gap-1 md:gap-2 text-xs md:text-sm p-1 md:p-1.5 rounded-lg" style={{ backgroundColor: 'var(--rn-clr-background-secondary)', border: '1px solid var(--rn-clr-border-primary)' }}>
                 {[
                   { label: 'Week', val: 7 },
                   { label: 'Month', val: 30 },
@@ -691,7 +688,7 @@ export const Statistics = () => {
                   <button
                     key={opt.label}
                     onClick={() => setDueOutlook(opt.val)}
-                    className="px-4 py-2 rounded-md transition-all smooth-transition font-medium"
+                    className="px-2 md:px-4 py-1 md:py-2 rounded-md transition-all smooth-transition font-medium text-xs md:text-sm"
                     style={dueOutlook === opt.val 
                       ? { backgroundColor: chartColor, color: '#fff', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
                       : { color: 'var(--rn-clr-content-secondary)' }
@@ -703,9 +700,9 @@ export const Statistics = () => {
               </div>
             </div>
 
-            <div className="stat-card p-4 border rounded-lg mb-6 text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-secondary)' }}>
-              <div className="text-sm opacity-70 mb-1">Total Due Cards (Next {dueOutlook} Days)</div>
-              <div className="text-4xl font-bold" style={{ color: chartColor }}>{dueCardsTotal.toLocaleString()}</div>
+            <div className="stat-card p-3 md:p-4 border rounded-lg mb-4 md:mb-6 text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-secondary)' }}>
+              <div className="text-xs md:text-sm opacity-70 mb-1">Total Due Cards (Next {dueOutlook} Days)</div>
+              <div className="text-2xl md:text-4xl font-bold" style={{ color: chartColor }}>{dueCardsTotal.toLocaleString()}</div>
             </div>
 
             <div className="chart-container">
