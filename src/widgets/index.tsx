@@ -11,7 +11,7 @@ async function onActivate(plugin: ReactRNPlugin) {
     'statistics',
     WidgetLocation.Popup,
     {
-      dimensions: { height: 'auto', width: 'auto' },
+      dimensions: { height: 800, width: 1200 },
     }
   );
   

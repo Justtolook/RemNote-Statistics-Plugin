@@ -312,7 +312,7 @@ export const Statistics = () => {
           overflowY: 'auto',
           overflowX: 'hidden',
           padding: '1rem',
-          minHeight: 0
+          minHeight: 300
         }}
       >
         {/* --- CONTROLS SECTION --- */}
