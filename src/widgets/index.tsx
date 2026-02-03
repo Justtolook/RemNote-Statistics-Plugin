@@ -4,24 +4,25 @@ import '../App.css';
 
 async function onActivate(plugin: ReactRNPlugin) {
 
-  // --- General Statistics Widget ---
+  // --- Statistics Dashboard Widget (Merged with Heatmap) ---
 
-  //Register statistics widget
+  // Register statistics widget with responsive dimensions
   await plugin.app.registerWidget(
     'statistics',
     WidgetLocation.Popup,
     {
-      dimensions: { height: 1200, width: 1000},
+      dimensions: { height: 800, width: 1200 },
     }
   );
- // COMMAND 1: Open Statistics (Saves Context)
+  
+  // Command: Open Statistics Dashboard
   await plugin.app.registerCommand({
     id: 'open-statistics',
     name: 'Open Statistics',
     action: async () => {
       const focusedRem = await plugin.focus.getFocusedRem();
       
-      // Save the context to session storage (Single Source of Truth)
+      // Save the context to session storage
       await plugin.storage.setSession('statistics-context', { 
         focusedRemId: focusedRem?._id 
       });
@@ -30,7 +31,7 @@ async function onActivate(plugin: ReactRNPlugin) {
     },
   });
 
-  // Settings
+  // Settings - Chart Color
   await plugin.settings.registerStringSetting({
     id: 'statistics-chart-color',
     defaultValue: '#3362f0',
@@ -38,50 +39,26 @@ async function onActivate(plugin: ReactRNPlugin) {
     description: 'Enter a valid hex color code for the charts (e.g. #3362f0).',
   });
 
-  // --- Heatmap Widget ---
-
-  //Register heatmap widget
-  await plugin.app.registerWidget(
-    'heatmap',
-    WidgetLocation.Popup,
-    {
-      dimensions: { height: 600, width: 1000},
-    },
-  );
-  //await plugin.window.openWidgetInPane('heatmap');
-  // Register settings
+  // Settings - Heatmap Colors
   await plugin.settings.registerStringSetting({
     id: 'HeatmapColorLow',
-    title: 'Color for Low values',
+    title: 'Heatmap: Color for Low values',
     defaultValue: '#b3dff0',
+    description: 'Color for low review counts in the heatmap.',
   });
+  
   await plugin.settings.registerStringSetting({
     id: 'HeatmapColorHigh',
-    title: 'Color for High values',
+    title: 'Heatmap: Color for High values',
     defaultValue: '#1302d1',
+    description: 'Color for high review counts in the heatmap.',
   });
+  
   await plugin.settings.registerNumberSetting({
     id: 'HeatmapTarget',
-    title: 'Target number of repetitions (defines "High" in HeatMap)',
+    title: 'Heatmap: Target number of repetitions',
     defaultValue: 50,
-  });
-
-  // COMMAND 2: Open Heatmap (NOW SAVES CONTEXT TOO)
-  await plugin.app.registerCommand({
-    id: 'open-heatmap',
-    name: 'Open Heatmap',
-    action: async () => {
-      // 1. Capture Focus
-      const focusedRem = await plugin.focus.getFocusedRem();
-      
-      // 2. Save to Session (Same key as statistics for consistency)
-      await plugin.storage.setSession('statistics-context', { 
-        focusedRemId: focusedRem?._id 
-      });
-
-      // 3. Open Widget
-      plugin.widget.openPopup('heatmap');
-    },
+    description: 'Defines the threshold for "High" values in the heatmap.',
   });
 }
 

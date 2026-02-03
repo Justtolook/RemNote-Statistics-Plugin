@@ -45,7 +45,13 @@ body,
 }
 
 .statisticsBody, .heatmapBody {
-  padding: 2rem;
+  padding: 0;
+}
+
+@media (min-width: 768px) {
+  .statisticsBody, .heatmapBody {
+    padding: 0;
+  }
 }
 
 .vSpacing-1rem {
