@@ -245,6 +245,94 @@ export function getDailyAverage(data: { x: number; y: number }[]): number {
 }
 
 /**
+ * Gets retention rate over time (percentage of remembered vs forgotten)
+ */
+export function getRetentionRateOverTime(allCards: Card[] | undefined): { x: number; y: number }[] {
+  if (!allCards) return [];
+
+  const dailyStats = new Map<string, { forgot: number; remembered: number }>();
+
+  for (const card of allCards) {
+    const history = card.repetitionHistory;
+    if (!history) continue;
+
+    for (const rep of history) {
+      if (rep.date <= LIMIT) continue;
+
+      const dayKey = new Date(rep.date).toDateString();
+      const stats = dailyStats.get(dayKey) || { forgot: 0, remembered: 0 };
+
+      if (rep.score === 0) {
+        stats.forgot += 1;
+      } else if (rep.score === 0.5 || rep.score === 1 || rep.score === 1.5) {
+        stats.remembered += 1;
+      }
+
+      dailyStats.set(dayKey, stats);
+    }
+  }
+
+  if (dailyStats.size === 0) return [];
+
+  const result: { x: number; y: number }[] = [];
+  for (const [dayKey, stats] of dailyStats) {
+    const total = stats.forgot + stats.remembered;
+    if (total === 0) continue;
+    const retention = (stats.remembered / total) * 100;
+    result.push({ x: new Date(dayKey).getTime(), y: Math.round(retention * 10) / 10 });
+  }
+
+  result.sort((a, b) => a.x - b.x);
+  return result;
+}
+
+/**
+ * Computes a simple moving average series from (x,y) data.
+ */
+export function getMovingAverageSeries(
+  data: { x: number; y: number }[],
+  windowSize: number
+): { x: number; y: number }[] {
+  if (!data || data.length === 0 || windowSize <= 1) return data || [];
+
+  const result: { x: number; y: number }[] = [];
+  let sum = 0;
+
+  for (let i = 0; i < data.length; i++) {
+    sum += data[i].y;
+    if (i >= windowSize) {
+      sum -= data[i - windowSize].y;
+    }
+    if (i >= windowSize - 1) {
+      const avg = sum / windowSize;
+      result.push({ x: data[i].x, y: Math.round(avg * 10) / 10 });
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Computes cumulative average series from (x,y) data.
+ */
+export function getCumulativeAverageSeries(
+  data: { x: number; y: number }[]
+): { x: number; y: number }[] {
+  if (!data || data.length === 0) return [];
+
+  const result: { x: number; y: number }[] = [];
+  let sum = 0;
+
+  for (let i = 0; i < data.length; i++) {
+    sum += data[i].y;
+    const avg = sum / (i + 1);
+    result.push({ x: data[i].x, y: Math.round(avg * 10) / 10 });
+  }
+
+  return result;
+}
+
+/**
  * Interpolates between two hex colors
  */
 export function interpolateColor(color1: string, color2: string, factor: number = 0.5): string {

@@ -22,7 +22,10 @@ import {
   categorizeDataByWeekday,
   getLongestStreak,
   getDailyAverage,
-  interpolateColor
+  interpolateColor,
+  getRetentionRateOverTime,
+  getMovingAverageSeries,
+  getCumulativeAverageSeries
 } from '../lib/dataProcessing';
 
 type RangeMode = 'Today' | 'Yesterday' | 'Week' | 'This Week' | 'Last Week' | 'Month' | 'This Month' | 'Last Month' | 'Year' | 'This Year' | 'Last Year' | 'All';
@@ -237,6 +240,22 @@ export const Statistics = () => {
   const buttonsPressedDataObj = getNumberRepetitionsGroupedByScore(filteredCards);
   const buttonsPressedTotal = Object.values(buttonsPressedDataObj).reduce((a:any, b:any) => a + b, 0) as number;
   const buttonsPressedData = transformObjectToCategoryFormat(buttonsPressedDataObj);
+
+  const retentionRateOverTimeData = React.useMemo(() => {
+    return getRetentionRateOverTime(filteredCards);
+  }, [filteredCards]);
+
+  const retentionRateWeeklyMA = React.useMemo(() => {
+    return getMovingAverageSeries(retentionRateOverTimeData, 7);
+  }, [retentionRateOverTimeData]);
+
+  const retentionRateMonthlyMA = React.useMemo(() => {
+    return getMovingAverageSeries(retentionRateOverTimeData, 30);
+  }, [retentionRateOverTimeData]);
+
+  const retentionRateCumulativeAvg = React.useMemo(() => {
+    return getCumulativeAverageSeries(retentionRateOverTimeData);
+  }, [retentionRateOverTimeData]);
 
   const dueCardsDataRaw = getFutureDueCards(activeCardsSource, dueOutlook);
   const dueCardsTotal = dueCardsDataRaw.reduce((sum, item) => sum + item[1], 0);
@@ -659,6 +678,16 @@ export const Statistics = () => {
             <div className="chart-container">
               {chart_repetionsCompounded(filteredCards)}
             </div>
+
+            <div className="chart-container">
+              {chart_retention_rate_over_time(
+                retentionRateOverTimeData,
+                retentionRateWeeklyMA,
+                retentionRateMonthlyMA,
+                retentionRateCumulativeAvg,
+                'Retention rate over time'
+              )}
+            </div>
             </div>
           </div>
 
@@ -933,6 +962,76 @@ function chart_repetionsCompounded(allCards: Card[] | undefined) {
     width="100%"
     height="300"
   /></div>
+}
+
+function chart_retention_rate_over_time(
+  dailyData: Array<{x: number, y: number}>,
+  weeklyMA: Array<{x: number, y: number}>,
+  monthlyMA: Array<{x: number, y: number}>,
+  cumulativeAvg: Array<{x: number, y: number}>,
+  title: string
+) {
+  if (!dailyData || dailyData.length === 0) return <div/>;
+
+  const options = {
+    ...getCommonChartOptions(title, 'datetime'),
+    dataLabels: { enabled: false },
+    stroke: {
+      curve: 'smooth' as const,
+      width: [3, 2, 2, 2],
+      dashArray: [0, 4, 6, 2]
+    },
+    colors: [chartColor, '#10b981', '#f59e0b', '#8b5cf6'],
+    legend: {
+      show: true,
+      position: 'top' as const,
+      horizontalAlign: 'right' as const,
+      labels: { colors: 'var(--rn-clr-content-primary)' },
+      onItemClick: { toggleDataSeries: true },
+      onItemHover: { highlightDataSeries: true }
+    },
+    yaxis: {
+      min: 0,
+      max: 100,
+      tickAmount: 5,
+      labels: {
+        style: { colors: 'var(--rn-clr-content-primary)' },
+        formatter: function (val: number) {
+          return val.toFixed(1) + '%';
+        }
+      }
+    },
+    tooltip: {
+      theme: 'light' as const,
+      x: { format: 'dd MMM yyyy' },
+      y: {
+        formatter: function(val: number) {
+          return val.toFixed(1) + '%';
+        },
+        title: { formatter: (seriesName: string) => seriesName }
+      }
+    },
+    markers: {
+      size: 0,
+      hover: { size: 5 }
+    }
+  };
+
+  const series = [
+    { name: 'Retention (Daily)', data: dailyData },
+    { name: 'Retention (7d MA)', data: weeklyMA },
+    { name: 'Retention (30d MA)', data: monthlyMA },
+    { name: 'Retention (Cumulative Avg)', data: cumulativeAvg }
+  ];
+
+  return <div>
+  <Chart
+    options={options}
+    type="line"
+    width="100%"
+    height="300"
+    series={series}
+  /></div>;
 }
 
 renderWidget(Statistics);
