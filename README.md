@@ -12,6 +12,7 @@ This plugin will give you the following statistics:
 - Longest streak of days learned
 - Ability to set the context for the statistics and heatmap to the current rem
 - [NEW] Quick Presets: Quick-select buttons for Week, Month, Year, Last Year, and All Time (Thanks to @hugomarins)
+- [NEW] Mobile support
 
 ## How to use
 Use the slash command `/statistics` to get a summary of your RemNote statistics in a popup. Press ESC or click outside the popup to close it.
