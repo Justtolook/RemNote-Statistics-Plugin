@@ -14,6 +14,15 @@ async function onActivate(plugin: ReactRNPlugin) {
       dimensions: { height: 800, width: 1200 },
     }
   );
+
+  // Register queue toolbar button for quick access to statistics
+  await plugin.app.registerWidget(
+    'queue-toolbar-button',
+    WidgetLocation.QueueToolbar,
+    {
+      dimensions: { height: 'auto', width: 'auto' },
+    }
+  );
   
   // Command: Open Statistics Dashboard
   await plugin.app.registerCommand({
