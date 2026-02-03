@@ -25,7 +25,9 @@ import {
   interpolateColor,
   getRetentionRateOverTime,
   getMovingAverageSeries,
-  getCumulativeAverageSeries
+  getCumulativeAverageSeries,
+  getHardestCards,
+  HardCardData
 } from '../lib/dataProcessing';
 
 type RangeMode = 'Today' | 'Yesterday' | 'Week' | 'This Week' | 'Last Week' | 'Month' | 'This Month' | 'Last Month' | 'Year' | 'This Year' | 'Last Year' | 'All';
@@ -57,6 +59,7 @@ export const Statistics = () => {
   const [dateStart, setDateStart] = React.useState<string>(initial.start);
   const [dateEnd, setDateEnd] = React.useState<string>(initial.end);
   const [dueOutlook, setDueOutlook] = React.useState<number>(30);
+  const [hardestCardsLimit, setHardestCardsLimit] = React.useState<number>(10);
 
   // -- Settings --
   const chartColorSettings = useTrackerPlugin(() => plugin.settings.getSetting('statistics-chart-color'));
@@ -270,6 +273,11 @@ export const Statistics = () => {
   const daysLearned = heatmapData.filter(d => d.y > 0).length;
   const dailyAverage = getDailyAverage(heatmapData);
   const longestStreak = getLongestStreak(heatmapData);
+
+  // Hardest cards data
+  const hardestCardsData = React.useMemo(() => {
+    return getHardestCards(filteredCards, hardestCardsLimit, 3);
+  }, [filteredCards, hardestCardsLimit]);
 
   // -- Styles --
   const containerStyle = getContainerStyle();
@@ -742,8 +750,201 @@ export const Statistics = () => {
               )}
             </div>
           </div>
+
+          <div className="section-divider"></div>
+
+          {/* SECTION 4: HARDEST FLASHCARDS */}
+          <div className="mb-6 md:mb-8 fade-in">
+            <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 md:gap-4 mb-4 md:mb-6">
+              <div className="flex items-center gap-2 md:gap-3">
+                <div className="p-1.5 md:p-2 rounded-lg" style={{ backgroundColor: 'var(--rn-clr-background-secondary)' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 md:w-6 md:h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#ef4444' }}>
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                    <line x1="12" y1="9" x2="12" y2="13"></line>
+                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                  </svg>
+                </div>
+                <div>
+                  <div className="font-bold text-lg md:text-xl">Hardest Flashcards</div>
+                  <div className="text-xs md:text-sm opacity-60 hidden sm:block">Cards with lowest retention rate (min. 3 reviews)</div>
+                </div>
+              </div>
+              <div className="flex gap-1 md:gap-2 text-xs md:text-sm p-1 md:p-1.5 rounded-lg" style={{ backgroundColor: 'var(--rn-clr-background-secondary)', border: '1px solid var(--rn-clr-border-primary)' }}>
+                {[
+                  { label: 'Top 10', val: 10 },
+                  { label: 'Top 20', val: 20 },
+                  { label: 'Top 50', val: 50 }
+                ].map(opt => (
+                  <button
+                    key={opt.label}
+                    onClick={() => setHardestCardsLimit(opt.val)}
+                    className="px-2 md:px-4 py-1 md:py-2 rounded-md transition-all smooth-transition font-medium text-xs md:text-sm"
+                    style={hardestCardsLimit === opt.val 
+                      ? { backgroundColor: '#ef4444', color: '#fff', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
+                      : { color: 'var(--rn-clr-content-secondary)' }
+                    }
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {hardestCardsData.length === 0 ? (
+              <div className="stat-card p-6 md:p-8 border rounded-lg text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-secondary)' }}>
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-12 h-12 mx-auto mb-3 opacity-40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <path d="M16 16s-1.5-2-4-2-4 2-4 2"></path>
+                  <line x1="9" y1="9" x2="9.01" y2="9"></line>
+                  <line x1="15" y1="9" x2="15.01" y2="9"></line>
+                </svg>
+                <div className="text-sm opacity-60">No difficult cards found with 3+ reviews</div>
+                <div className="text-xs opacity-40 mt-1">Keep studying to collect more data!</div>
+              </div>
+            ) : (
+              <div className="border rounded-lg overflow-hidden" style={{ borderColor: 'var(--rn-clr-border-primary)' }}>
+                {/* Table Header */}
+                <div className="grid grid-cols-12 gap-2 p-3 text-xs font-semibold uppercase tracking-wide opacity-70" style={{ backgroundColor: 'var(--rn-clr-background-tertiary)' }}>
+                  <div className="col-span-1 text-center">#</div>
+                  <div className="col-span-5 md:col-span-6">Flashcard</div>
+                  <div className="col-span-2 text-center hidden sm:block">Reviews</div>
+                  <div className="col-span-2 text-center hidden sm:block">Forgot</div>
+                  <div className="col-span-6 sm:col-span-2 text-center">Retention</div>
+                </div>
+                {/* Table Body */}
+                <div className="divide-y" style={{ borderColor: 'var(--rn-clr-border-primary)' }}>
+                  {hardestCardsData.map((card, index) => (
+                    <HardestCardRow 
+                      key={card.cardId}
+                      card={card}
+                      index={index}
+                      plugin={plugin}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </>
       )}
+      </div>
+    </div>
+  );
+}
+
+// --- Hardest Card Row Component ---
+
+interface HardestCardRowProps {
+  card: HardCardData;
+  index: number;
+  plugin: ReturnType<typeof usePlugin>;
+}
+
+function HardestCardRow({ card, index, plugin }: HardestCardRowProps) {
+  const [remText, setRemText] = React.useState<string>('Loading...');
+  const [isHovered, setIsHovered] = React.useState(false);
+
+  // Fetch the Rem text
+  React.useEffect(() => {
+    let cancelled = false;
+    
+    async function fetchRemText() {
+      try {
+        const rem = await plugin.rem.findOne(card.remId);
+        if (cancelled) return;
+        
+        if (!rem) {
+          setRemText('(Rem not found)');
+          return;
+        }
+        
+        const text = rem.text ? await plugin.richText.toString(rem.text) : null;
+        if (cancelled) return;
+        
+        if (text && text.trim().length > 0) {
+          // Truncate long text
+          const truncated = text.length > 80 ? text.substring(0, 80) + '...' : text;
+          setRemText(truncated);
+        } else {
+          setRemText('(Untitled)');
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setRemText('(Error loading)');
+        }
+      }
+    }
+
+    fetchRemText();
+    return () => { cancelled = true; };
+  }, [card.remId, plugin]);
+
+  const handleClick = async () => {
+    try {
+      const rem = await plugin.rem.findOne(card.remId);
+      if (rem) {
+        await plugin.window.openRem(rem);
+      }
+    } catch (error) {
+      console.error('Stats Plugin: Error opening Rem:', error);
+    }
+  };
+
+  // Color based on retention rate (red for low, yellow for medium)
+  const getRetentionColor = (rate: number) => {
+    if (rate <= 30) return '#ef4444'; // red
+    if (rate <= 50) return '#f97316'; // orange
+    if (rate <= 70) return '#eab308'; // yellow
+    return '#22c55e'; // green
+  };
+
+  return (
+    <div 
+      className="grid grid-cols-12 gap-2 p-3 items-center cursor-pointer transition-all"
+      style={{ 
+        backgroundColor: isHovered ? 'var(--rn-clr-background-tertiary)' : 'var(--rn-clr-background-primary)',
+      }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onClick={handleClick}
+    >
+      {/* Rank */}
+      <div className="col-span-1 text-center">
+        <span className="text-sm font-medium opacity-60">{index + 1}</span>
+      </div>
+      
+      {/* Flashcard Text */}
+      <div className="col-span-5 md:col-span-6">
+        <div 
+          className="text-sm truncate hover:underline"
+          style={{ color: isHovered ? 'var(--rn-clr-link)' : 'var(--rn-clr-content-primary)' }}
+          title={remText}
+        >
+          {remText}
+        </div>
+      </div>
+      
+      {/* Reviews Count */}
+      <div className="col-span-2 text-center hidden sm:block">
+        <span className="text-sm">{card.totalReviews}</span>
+      </div>
+      
+      {/* Forgot Count */}
+      <div className="col-span-2 text-center hidden sm:block">
+        <span className="text-sm" style={{ color: '#ef4444' }}>{card.forgotCount}</span>
+      </div>
+      
+      {/* Retention Rate */}
+      <div className="col-span-6 sm:col-span-2 text-center">
+        <span 
+          className="inline-block px-2 py-1 rounded-full text-xs font-semibold"
+          style={{ 
+            backgroundColor: `${getRetentionColor(card.retentionRate)}20`,
+            color: getRetentionColor(card.retentionRate)
+          }}
+        >
+          {card.retentionRate.toFixed(1)}%
+        </span>
       </div>
     </div>
   );

@@ -354,3 +354,88 @@ export function interpolateColor(color1: string, color2: string, factor: number 
 
   return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
 }
+
+/**
+ * Represents a card with difficulty metrics
+ */
+export interface HardCardData {
+  cardId: string;
+  remId: string;
+  totalReviews: number;
+  forgotCount: number;
+  rememberedCount: number;
+  retentionRate: number; // 0-100 percentage
+  lastReviewDate: number | null;
+}
+
+/**
+ * Gets the hardest cards based on retention rate (lowest retention = hardest)
+ * Only includes cards with a minimum number of reviews to ensure statistical significance.
+ * 
+ * @param allCards - Array of all cards to analyze
+ * @param limit - Maximum number of cards to return
+ * @param minReviews - Minimum reviews required to be included (default: 3)
+ * @returns Array of HardCardData sorted by retention rate (ascending = hardest first)
+ */
+export function getHardestCards(
+  allCards: Card[] | undefined, 
+  limit: number = 10,
+  minReviews: number = 3
+): HardCardData[] {
+  if (!allCards || allCards.length === 0) return [];
+
+  const cardStats: HardCardData[] = [];
+
+  for (const card of allCards) {
+    const history = card.repetitionHistory;
+    if (!history || history.length < minReviews) continue;
+
+    let forgotCount = 0;
+    let rememberedCount = 0;
+    let lastReviewDate: number | null = null;
+
+    for (const rep of history) {
+      if (rep.date <= LIMIT) continue;
+      
+      // Track last review date
+      if (lastReviewDate === null || rep.date > lastReviewDate) {
+        lastReviewDate = rep.date;
+      }
+
+      // Score 0 = Forgot, 0.5/1/1.5 = Hard/Good/Easy (remembered)
+      if (rep.score === 0) {
+        forgotCount++;
+      } else if (rep.score === 0.5 || rep.score === 1 || rep.score === 1.5) {
+        rememberedCount++;
+      }
+      // Skip score 0.01 (skipped cards)
+    }
+
+    const totalReviews = forgotCount + rememberedCount;
+    if (totalReviews < minReviews) continue;
+
+    const retentionRate = (rememberedCount / totalReviews) * 100;
+
+    cardStats.push({
+      cardId: card._id,
+      remId: card.remId,
+      totalReviews,
+      forgotCount,
+      rememberedCount,
+      retentionRate: Math.round(retentionRate * 10) / 10,
+      lastReviewDate
+    });
+  }
+
+  // Sort by retention rate ascending (lowest = hardest) 
+  // If same retention rate, sort by forgot count descending (more forgot = harder)
+  cardStats.sort((a, b) => {
+    if (a.retentionRate !== b.retentionRate) {
+      return a.retentionRate - b.retentionRate;
+    }
+    return b.forgotCount - a.forgotCount;
+  });
+
+  return cardStats.slice(0, limit);
+}
+

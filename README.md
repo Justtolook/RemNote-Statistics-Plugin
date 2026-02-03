@@ -14,6 +14,7 @@ The RemNote Statistics Plugin transforms your flashcard review data into actiona
 - **Button Distribution Analysis**: Visualize how often you press Skip, Forgot, Hard, Good, or Easy during reviews
 - **Card Repetition Statistics**: See the distribution of cards by number of reviews
 - **Future Outlook**: Forecast upcoming due cards for the next 30, 60, or 90 days
+- **Hardest Flashcards**: Identify your most challenging cards ranked by lowest retention rate with direct links to improve them
 
 ### 📅 Flexible Time Ranges
 Quick preset buttons for easy date filtering:
@@ -106,8 +107,9 @@ The dashboard is organized into four main sections:
 
 ### For Students
 - **Track Study Consistency**: Use the heatmap to maintain daily learning streaks
-- **Identify Weak Areas**: Low retention rates indicate topics needing more review
+- **Identify Weak Areas**: Use the Hardest Flashcards section to find and improve problematic cards
 - **Plan Study Sessions**: Forecast view helps you anticipate heavy review days
+- **Target Problem Cards**: Click directly on difficult cards to review and improve their content
 
 ### For Power Users
 - **Optimize Spaced Repetition**: Monitor retention rate trends to adjust your learning strategy
@@ -115,6 +117,7 @@ The dashboard is organized into four main sections:
 - **Data-Driven Decisions**: Use moving averages to see long-term retention trends beyond daily fluctuations
 
 ## 📋 Changelog
+
 
 ### Version 1.5.0
 **New Features:**
@@ -125,6 +128,13 @@ The dashboard is organized into four main sections:
   - 30-day moving average (smoothed monthly trends)
   - Cumulative average (all-time retention from start date)
 - 🎯 Interactive legend toggles to show/hide chart series
+- 🔥 **Hardest Flashcards Section**: New analysis tool that identifies your most challenging cards
+  - Ranks cards by lowest retention rate (percentage of successful recalls)
+  - Requires minimum 3 reviews per card for statistical significance
+  - Displays forgot count, total reviews, and retention percentage
+  - **Clickable rows** - click any card to navigate directly to its Rem for editing/improvement
+  - Flexible limits: View Top 10, Top 20, or Top 50 hardest cards
+  - Color-coded retention badges (red/orange/yellow/green)
 
 
 ### Version 1.4.0
