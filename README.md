@@ -15,7 +15,6 @@ This plugin will give you the following statistics:
 
 ## How to use
 Use the slash command `/statistics` to get a summary of your RemNote statistics in a popup. Press ESC or click outside the popup to close it.
-Use the slash command `/heatmap` to get a heatmap of your reviews. Press ESC or click outside the popup to close it.
 You costumize the color of the charts in the settings by giving a hex color code.
 
 ## Additional information
