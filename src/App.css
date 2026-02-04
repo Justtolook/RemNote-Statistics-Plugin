@@ -88,7 +88,7 @@
     transform: translateY(0);
   }
   50% {
-    transform: translateX(-60px);
+    transform: translateX(-80px);
     rotate: calc(-5deg);
   }
 }
