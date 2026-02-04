@@ -439,3 +439,85 @@ export function getHardestCards(
   return cardStats.slice(0, limit);
 }
 
+/**
+ * Represents retention rate data for a time of day block
+ */
+export interface TimeOfDayRetention {
+  timeBlock: string; // e.g., "12 AM - 3 AM"
+  startHour: number; // 0-23
+  forgotCount: number;
+  rememberedCount: number;
+  totalReviews: number;
+  retentionRate: number; // 0-100 percentage
+}
+
+/**
+ * Gets retention rate by time of day in 3-hour blocks
+ * Shows when during the day the user has the best/worst retention
+ * 
+ * @param allCards - Array of all cards to analyze
+ * @returns Array of TimeOfDayRetention for each 3-hour block
+ */
+export function getRetentionRateByTimeOfDay(allCards: Card[] | undefined): TimeOfDayRetention[] {
+  if (!allCards || allCards.length === 0) return [];
+
+  // Define 3-hour blocks (8 blocks total)
+  const timeBlocks = [
+    { label: '12 AM - 3 AM', startHour: 0 },
+    { label: '3 AM - 6 AM', startHour: 3 },
+    { label: '6 AM - 9 AM', startHour: 6 },
+    { label: '9 AM - 12 PM', startHour: 9 },
+    { label: '12 PM - 3 PM', startHour: 12 },
+    { label: '3 PM - 6 PM', startHour: 15 },
+    { label: '6 PM - 9 PM', startHour: 18 },
+    { label: '9 PM - 12 AM', startHour: 21 }
+  ];
+
+  // Initialize stats for each block
+  const blockStats = timeBlocks.map(block => ({
+    timeBlock: block.label,
+    startHour: block.startHour,
+    forgotCount: 0,
+    rememberedCount: 0,
+    totalReviews: 0,
+    retentionRate: 0
+  }));
+
+  // Process all reviews
+  for (const card of allCards) {
+    const history = card.repetitionHistory;
+    if (!history) continue;
+
+    for (const rep of history) {
+      if (rep.date <= LIMIT) continue;
+
+      // Get hour of the day (0-23)
+      const date = new Date(rep.date);
+      const hour = date.getHours();
+
+      // Find which 3-hour block this belongs to
+      const blockIndex = Math.floor(hour / 3);
+      
+      if (blockIndex < 0 || blockIndex >= 8) continue; // Safety check
+
+      // Score 0 = Forgot, 0.5/1/1.5 = Hard/Good/Easy (remembered)
+      if (rep.score === 0) {
+        blockStats[blockIndex].forgotCount++;
+      } else if (rep.score === 0.5 || rep.score === 1 || rep.score === 1.5) {
+        blockStats[blockIndex].rememberedCount++;
+      }
+      // Skip score 0.01 (skipped cards)
+    }
+  }
+
+  // Calculate retention rates
+  for (const block of blockStats) {
+    block.totalReviews = block.forgotCount + block.rememberedCount;
+    if (block.totalReviews > 0) {
+      block.retentionRate = Math.round((block.rememberedCount / block.totalReviews) * 1000) / 10;
+    }
+  }
+
+  return blockStats;
+}
+

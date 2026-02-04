@@ -15,6 +15,7 @@ The RemNote Statistics Plugin transforms your flashcard review data into actiona
 - **Card Repetition Statistics**: See the distribution of cards by number of reviews
 - **Future Outlook**: Forecast upcoming due cards for the next 30, 60, or 90 days
 - **Hardest Flashcards**: Identify your most challenging cards ranked by lowest retention rate with direct links to improve them
+- **Time of Day Analysis**: Discover your most productive hours with retention rate by time of day in 3-hour blocks
 
 ### 📅 Flexible Time Ranges
 Quick preset buttons for easy date filtering:
@@ -108,8 +109,9 @@ The dashboard is organized into four main sections:
 ### For Students
 - **Track Study Consistency**: Use the heatmap to maintain daily learning streaks
 - **Identify Weak Areas**: Use the Hardest Flashcards section to find and improve problematic cards
-- **Plan Study Sessions**: Forecast view helps you anticipate heavy review days
+- **Plan Study Sessions**: Forecast view helps you anticipate heavy review days and the time of day chart helps you schedule reviews when you're most productive
 - **Target Problem Cards**: Click directly on difficult cards to review and improve their content
+- **Optimize Study Schedule**: Review the time of day chart to discover when you have the best retention and schedule important reviews accordingly
 
 ### For Power Users
 - **Optimize Spaced Repetition**: Monitor retention rate trends to adjust your learning strategy
@@ -127,24 +129,23 @@ The dashboard is organized into four main sections:
   - 7-day moving average (smoothed weekly trends)
   - 30-day moving average (smoothed monthly trends)
   - Cumulative average (all-time retention from start date)
-- 🎯 Interactive legend toggles to show/hide chart series
 - 🔥 **Hardest Flashcards Section**: New analysis tool that identifies your most challenging cards
   - Ranks cards by lowest retention rate (percentage of successful recalls)
   - Requires minimum 3 reviews per card for statistical significance
   - Displays forgot count, total reviews, and retention percentage
   - **Clickable rows** - click any card to navigate directly to its Rem for editing/improvement
-  - Flexible limits: View Top 10, Top 20, or Top 50 hardest cards
-  - Color-coded retention badges (red/orange/yellow/green)
+- ⏰ **Retention Rate by Time of Day**: New chart showing productivity patterns throughout the day
+  - Displays retention rate in 3-hour blocks (8 blocks from 12 AM to 12 AM)
+  - Color-coded bars (green/yellow/orange/red) for quick visual assessment
+  - Highlights your most productive time block with best retention rate
+  - Shows total reviews, forgot count, and remembered count for each time block
+  - Helps identify optimal study times for maximum retention
 
 
 ### Version 1.4.0
 **UI/UX Improvements:**
 - 🎨 Comprehensive visual overhaul with better spacing and typography
-- 🔲 Improved section organization with dividers and icons
-- 💫 Enhanced loading states with animated indicators
 - 🎴 Stat cards with hover effects and color coding
-- 🖱️ Improved chart containers with consistent styling
-- 📐 Responsive grid layouts with mobile breakpoints
 - 📱 Enhanced mobile responsiveness with improved touch interactions
 
 
