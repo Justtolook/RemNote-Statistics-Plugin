@@ -245,6 +245,94 @@ export function getDailyAverage(data: { x: number; y: number }[]): number {
 }
 
 /**
+ * Gets retention rate over time (percentage of remembered vs forgotten)
+ */
+export function getRetentionRateOverTime(allCards: Card[] | undefined): { x: number; y: number }[] {
+  if (!allCards) return [];
+
+  const dailyStats = new Map<string, { forgot: number; remembered: number }>();
+
+  for (const card of allCards) {
+    const history = card.repetitionHistory;
+    if (!history) continue;
+
+    for (const rep of history) {
+      if (rep.date <= LIMIT) continue;
+
+      const dayKey = new Date(rep.date).toDateString();
+      const stats = dailyStats.get(dayKey) || { forgot: 0, remembered: 0 };
+
+      if (rep.score === 0) {
+        stats.forgot += 1;
+      } else if (rep.score === 0.5 || rep.score === 1 || rep.score === 1.5) {
+        stats.remembered += 1;
+      }
+
+      dailyStats.set(dayKey, stats);
+    }
+  }
+
+  if (dailyStats.size === 0) return [];
+
+  const result: { x: number; y: number }[] = [];
+  for (const [dayKey, stats] of dailyStats) {
+    const total = stats.forgot + stats.remembered;
+    if (total === 0) continue;
+    const retention = (stats.remembered / total) * 100;
+    result.push({ x: new Date(dayKey).getTime(), y: Math.round(retention * 10) / 10 });
+  }
+
+  result.sort((a, b) => a.x - b.x);
+  return result;
+}
+
+/**
+ * Computes a simple moving average series from (x,y) data.
+ */
+export function getMovingAverageSeries(
+  data: { x: number; y: number }[],
+  windowSize: number
+): { x: number; y: number }[] {
+  if (!data || data.length === 0 || windowSize <= 1) return data || [];
+
+  const result: { x: number; y: number }[] = [];
+  let sum = 0;
+
+  for (let i = 0; i < data.length; i++) {
+    sum += data[i].y;
+    if (i >= windowSize) {
+      sum -= data[i - windowSize].y;
+    }
+    if (i >= windowSize - 1) {
+      const avg = sum / windowSize;
+      result.push({ x: data[i].x, y: Math.round(avg * 10) / 10 });
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Computes cumulative average series from (x,y) data.
+ */
+export function getCumulativeAverageSeries(
+  data: { x: number; y: number }[]
+): { x: number; y: number }[] {
+  if (!data || data.length === 0) return [];
+
+  const result: { x: number; y: number }[] = [];
+  let sum = 0;
+
+  for (let i = 0; i < data.length; i++) {
+    sum += data[i].y;
+    const avg = sum / (i + 1);
+    result.push({ x: data[i].x, y: Math.round(avg * 10) / 10 });
+  }
+
+  return result;
+}
+
+/**
  * Interpolates between two hex colors
  */
 export function interpolateColor(color1: string, color2: string, factor: number = 0.5): string {
@@ -266,3 +354,170 @@ export function interpolateColor(color1: string, color2: string, factor: number 
 
   return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
 }
+
+/**
+ * Represents a card with difficulty metrics
+ */
+export interface HardCardData {
+  cardId: string;
+  remId: string;
+  totalReviews: number;
+  forgotCount: number;
+  rememberedCount: number;
+  retentionRate: number; // 0-100 percentage
+  lastReviewDate: number | null;
+}
+
+/**
+ * Gets the hardest cards based on retention rate (lowest retention = hardest)
+ * Only includes cards with a minimum number of reviews to ensure statistical significance.
+ * 
+ * @param allCards - Array of all cards to analyze
+ * @param limit - Maximum number of cards to return
+ * @param minReviews - Minimum reviews required to be included (default: 3)
+ * @returns Array of HardCardData sorted by retention rate (ascending = hardest first)
+ */
+export function getHardestCards(
+  allCards: Card[] | undefined, 
+  limit: number = 10,
+  minReviews: number = 3
+): HardCardData[] {
+  if (!allCards || allCards.length === 0) return [];
+
+  const cardStats: HardCardData[] = [];
+
+  for (const card of allCards) {
+    const history = card.repetitionHistory;
+    if (!history || history.length < minReviews) continue;
+
+    let forgotCount = 0;
+    let rememberedCount = 0;
+    let lastReviewDate: number | null = null;
+
+    for (const rep of history) {
+      if (rep.date <= LIMIT) continue;
+      
+      // Track last review date
+      if (lastReviewDate === null || rep.date > lastReviewDate) {
+        lastReviewDate = rep.date;
+      }
+
+      // Score 0 = Forgot, 0.5/1/1.5 = Hard/Good/Easy (remembered)
+      if (rep.score === 0) {
+        forgotCount++;
+      } else if (rep.score === 0.5 || rep.score === 1 || rep.score === 1.5) {
+        rememberedCount++;
+      }
+      // Skip score 0.01 (skipped cards)
+    }
+
+    const totalReviews = forgotCount + rememberedCount;
+    if (totalReviews < minReviews) continue;
+
+    const retentionRate = (rememberedCount / totalReviews) * 100;
+
+    cardStats.push({
+      cardId: card._id,
+      remId: card.remId,
+      totalReviews,
+      forgotCount,
+      rememberedCount,
+      retentionRate: Math.round(retentionRate * 10) / 10,
+      lastReviewDate
+    });
+  }
+
+  // Sort by retention rate ascending (lowest = hardest) 
+  // If same retention rate, sort by forgot count descending (more forgot = harder)
+  cardStats.sort((a, b) => {
+    if (a.retentionRate !== b.retentionRate) {
+      return a.retentionRate - b.retentionRate;
+    }
+    return b.forgotCount - a.forgotCount;
+  });
+
+  return cardStats.slice(0, limit);
+}
+
+/**
+ * Represents retention rate data for a time of day block
+ */
+export interface TimeOfDayRetention {
+  timeBlock: string; // e.g., "12 AM - 3 AM"
+  startHour: number; // 0-23
+  forgotCount: number;
+  rememberedCount: number;
+  totalReviews: number;
+  retentionRate: number; // 0-100 percentage
+}
+
+/**
+ * Gets retention rate by time of day in 3-hour blocks
+ * Shows when during the day the user has the best/worst retention
+ * 
+ * @param allCards - Array of all cards to analyze
+ * @returns Array of TimeOfDayRetention for each 3-hour block
+ */
+export function getRetentionRateByTimeOfDay(allCards: Card[] | undefined): TimeOfDayRetention[] {
+  if (!allCards || allCards.length === 0) return [];
+
+  // Define 3-hour blocks (8 blocks total)
+  const timeBlocks = [
+    { label: '12 AM - 3 AM', startHour: 0 },
+    { label: '3 AM - 6 AM', startHour: 3 },
+    { label: '6 AM - 9 AM', startHour: 6 },
+    { label: '9 AM - 12 PM', startHour: 9 },
+    { label: '12 PM - 3 PM', startHour: 12 },
+    { label: '3 PM - 6 PM', startHour: 15 },
+    { label: '6 PM - 9 PM', startHour: 18 },
+    { label: '9 PM - 12 AM', startHour: 21 }
+  ];
+
+  // Initialize stats for each block
+  const blockStats = timeBlocks.map(block => ({
+    timeBlock: block.label,
+    startHour: block.startHour,
+    forgotCount: 0,
+    rememberedCount: 0,
+    totalReviews: 0,
+    retentionRate: 0
+  }));
+
+  // Process all reviews
+  for (const card of allCards) {
+    const history = card.repetitionHistory;
+    if (!history) continue;
+
+    for (const rep of history) {
+      if (rep.date <= LIMIT) continue;
+
+      // Get hour of the day (0-23)
+      const date = new Date(rep.date);
+      const hour = date.getHours();
+
+      // Find which 3-hour block this belongs to
+      const blockIndex = Math.floor(hour / 3);
+      
+      if (blockIndex < 0 || blockIndex >= 8) continue; // Safety check
+
+      // Score 0 = Forgot, 0.5/1/1.5 = Hard/Good/Easy (remembered)
+      if (rep.score === 0) {
+        blockStats[blockIndex].forgotCount++;
+      } else if (rep.score === 0.5 || rep.score === 1 || rep.score === 1.5) {
+        blockStats[blockIndex].rememberedCount++;
+      }
+      // Skip score 0.01 (skipped cards)
+    }
+  }
+
+  // Calculate retention rates
+  for (const block of blockStats) {
+    block.totalReviews = block.forgotCount + block.rememberedCount;
+    if (block.totalReviews > 0) {
+      block.retentionRate = Math.round((block.rememberedCount / block.totalReviews) * 1000) / 10;
+    }
+  }
+
+  return blockStats;
+}
+

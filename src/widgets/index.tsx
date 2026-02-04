@@ -14,6 +14,31 @@ async function onActivate(plugin: ReactRNPlugin) {
       dimensions: { height: 800, width: 1200 },
     }
   );
+
+  // Detect if device is a small mobile device (smartphone, not tablet)
+  const isSmallMobile = window.innerWidth < 780 && // Width less than tablet breakpoint
+    ('ontouchstart' in window || navigator.maxTouchPoints > 0); // Touch device
+
+  // Register queue toolbar button in different locations based on device size
+  if (isSmallMobile) {
+    // On small mobile devices, place under editor to avoid blocking other elements
+    await plugin.app.registerWidget(
+      'queue-toolbar-button',
+      WidgetLocation.QueueBelowTopBar,
+      {
+        dimensions: { height: 'auto', width: 'auto' },
+      }
+    );
+  } else {
+    // On tablets, desktops, and larger screens, use queue toolbar
+    await plugin.app.registerWidget(
+      'queue-toolbar-button',
+      WidgetLocation.QueueToolbar,
+      {
+        dimensions: { height: 'auto', width: 'auto' },
+      }
+    );
+  }
   
   // Command: Open Statistics Dashboard
   await plugin.app.registerCommand({

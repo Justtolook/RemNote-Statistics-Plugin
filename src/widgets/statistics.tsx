@@ -22,7 +22,14 @@ import {
   categorizeDataByWeekday,
   getLongestStreak,
   getDailyAverage,
-  interpolateColor
+  interpolateColor,
+  getRetentionRateOverTime,
+  getMovingAverageSeries,
+  getCumulativeAverageSeries,
+  getHardestCards,
+  HardCardData,
+  getRetentionRateByTimeOfDay,
+  TimeOfDayRetention
 } from '../lib/dataProcessing';
 
 type RangeMode = 'Today' | 'Yesterday' | 'Week' | 'This Week' | 'Last Week' | 'Month' | 'This Month' | 'Last Month' | 'Year' | 'This Year' | 'Last Year' | 'All';
@@ -54,6 +61,14 @@ export const Statistics = () => {
   const [dateStart, setDateStart] = React.useState<string>(initial.start);
   const [dateEnd, setDateEnd] = React.useState<string>(initial.end);
   const [dueOutlook, setDueOutlook] = React.useState<number>(30);
+  const [hardestCardsLimit, setHardestCardsLimit] = React.useState<number>(10);
+  
+  // -- Easter Eggs --
+  const [konamiCode, setKonamiCode] = React.useState<string[]>([]);
+  const [showEasterEgg, setShowEasterEgg] = React.useState(false);
+  const [logoClickCount, setLogoClickCount] = React.useState(0);
+  const [showConfetti, setShowConfetti] = React.useState(false);
+  const [showEasterBunny, setShowEasterBunny] = React.useState(false);
 
   // -- Settings --
   const chartColorSettings = useTrackerPlugin(() => plugin.settings.getSetting('statistics-chart-color'));
@@ -83,6 +98,38 @@ export const Statistics = () => {
   const heatmapColorMedium = React.useMemo(() => {
     return interpolateColor(heatmapColorLow, heatmapColorHigh, 0.5);
   }, [heatmapColorLow, heatmapColorHigh]);
+
+  // -- Easter Egg: Konami Code --
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const key = e.key;
+      const konamiSequence = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a'];
+      
+      setKonamiCode(prev => {
+        const newCode = [...prev, key].slice(-10);
+        if (newCode.join(',') === konamiSequence.join(',')) {
+          setShowEasterEgg(true);
+          setTimeout(() => setShowEasterEgg(false), 5000);
+          return [];
+        }
+        return newCode;
+      });
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // -- Easter Egg: Logo Click Counter --
+  React.useEffect(() => {
+    if (logoClickCount >= 7) {
+      setShowConfetti(true);
+      setTimeout(() => {
+        setShowConfetti(false);
+        setLogoClickCount(0);
+      }, 3000);
+    }
+  }, [logoClickCount]);
 
   // -- Global Data --
   const allGlobalCards = useTrackerPlugin(async (reactivePlugin) => await reactivePlugin.card.getAll());
@@ -238,6 +285,22 @@ export const Statistics = () => {
   const buttonsPressedTotal = Object.values(buttonsPressedDataObj).reduce((a:any, b:any) => a + b, 0) as number;
   const buttonsPressedData = transformObjectToCategoryFormat(buttonsPressedDataObj);
 
+  const retentionRateOverTimeData = React.useMemo(() => {
+    return getRetentionRateOverTime(filteredCards);
+  }, [filteredCards]);
+
+  const retentionRateWeeklyMA = React.useMemo(() => {
+    return getMovingAverageSeries(retentionRateOverTimeData, 7);
+  }, [retentionRateOverTimeData]);
+
+  const retentionRateMonthlyMA = React.useMemo(() => {
+    return getMovingAverageSeries(retentionRateOverTimeData, 30);
+  }, [retentionRateOverTimeData]);
+
+  const retentionRateCumulativeAvg = React.useMemo(() => {
+    return getCumulativeAverageSeries(retentionRateOverTimeData);
+  }, [retentionRateOverTimeData]);
+
   const dueCardsDataRaw = getFutureDueCards(activeCardsSource, dueOutlook);
   const dueCardsTotal = dueCardsDataRaw.reduce((sum, item) => sum + item[1], 0);
   
@@ -251,6 +314,16 @@ export const Statistics = () => {
   const daysLearned = heatmapData.filter(d => d.y > 0).length;
   const dailyAverage = getDailyAverage(heatmapData);
   const longestStreak = getLongestStreak(heatmapData);
+
+  // Hardest cards data
+  const hardestCardsData = React.useMemo(() => {
+    return getHardestCards(filteredCards, hardestCardsLimit, 3);
+  }, [filteredCards, hardestCardsLimit]);
+
+  // Time of day retention data
+  const timeOfDayRetentionData = React.useMemo(() => {
+    return getRetentionRateByTimeOfDay(filteredCards);
+  }, [filteredCards]);
 
   // -- Styles --
   const containerStyle = getContainerStyle();
@@ -290,16 +363,72 @@ export const Statistics = () => {
     >
       {/* Header - Fixed */}
       <div style={{ flex: '0 0 auto', padding: '1rem', borderBottom: '1px solid var(--rn-clr-border-primary)' }} className="md:px-6">
-        <div className="flex items-center gap-2 md:gap-3">
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 md:w-7 md:h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: chartColor }}>
-            <line x1="18" y1="20" x2="18" y2="10"></line>
-            <line x1="12" y1="20" x2="12" y2="4"></line>
-            <line x1="6" y1="20" x2="6" y2="14"></line>
-          </svg>
-          <div>
-            <div className="font-bold text-lg md:text-2xl" style={{ color: 'var(--rn-clr-content-primary)' }}>Statistics Dashboard</div>
-            <div className="text-xs md:text-sm opacity-60 hidden sm:block">Comprehensive flashcard analytics and review insights</div>
+        {/* Easter Egg: Konami Code Message */}
+        {showEasterEgg && (
+          <div 
+            className="mb-4 p-4 rounded-lg text-center animate-bounce"
+            style={{ 
+              backgroundColor: chartColor,
+              color: '#fff',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+            }}
+          >
+            <div className="text-lg font-bold">🎉 Konami Code Activated! 🎉</div>
+            <div className="text-sm mt-1">You're a true legend! Keep crushing those flashcards! 💪</div>
           </div>
+        )}
+        
+        {/* Easter Egg: Confetti Effect */}
+        {showConfetti && (
+          <div 
+            className="mb-4 p-6 rounded-lg text-center"
+            style={{ 
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              color: '#fff',
+              boxShadow: '0 8px 20px rgba(0,0,0,0.2)',
+              animation: 'pulse 0.5s ease-in-out infinite'
+            }}
+          >
+            <div className="text-3xl mb-2">🎊 🎉 🎈 ✨ 🎁 🌟</div>
+            <div className="text-xl font-bold">Congratulations!</div>
+            <div className="text-sm mt-2">You found the secret click counter! 🎯</div>
+            <div className="text-xs mt-1 opacity-90">You're clearly very curious... or very bored 😄</div>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between gap-2 md:gap-3">
+          <div className="flex items-center gap-2 md:gap-3">
+            <div 
+              onClick={() => setLogoClickCount(prev => prev + 1)}
+              className="cursor-pointer transition-transform hover:scale-110"
+              title="Click me multiple times... 👀"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 md:w-7 md:h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: chartColor }}>
+                <line x1="18" y1="20" x2="18" y2="10"></line>
+                <line x1="12" y1="20" x2="12" y2="4"></line>
+                <line x1="6" y1="20" x2="6" y2="14"></line>
+              </svg>
+            </div>
+            <div>
+              <div className="font-bold text-lg md:text-2xl" style={{ color: 'var(--rn-clr-content-primary)' }}>Statistics Dashboard</div>
+              <div className="text-xs md:text-sm opacity-60 hidden sm:block">Comprehensive flashcard analytics and review insights</div>
+            </div>
+          </div>
+          <button
+            onClick={() => plugin.widget.closePopup()}
+            className="flex items-center justify-center p-2 rounded-lg transition-all hover:opacity-80"
+            style={{ 
+              backgroundColor: 'var(--rn-clr-background-secondary)',
+              border: '1px solid var(--rn-clr-border-primary)',
+              cursor: 'pointer'
+            }}
+            title="Close Statistics"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
         </div>
       </div>
       
@@ -621,6 +750,13 @@ export const Statistics = () => {
                     ? "N/A" 
                     : (parseFloat(retentionRate(buttonsPressedDataObj)) * 100).toFixed(0) + "%"}
                 </div>
+                {/* Easter Egg: Perfect Score */}
+                {retentionRate(buttonsPressedDataObj) !== "No Data" && 
+                 parseFloat(retentionRate(buttonsPressedDataObj)) === 1.0 && (
+                  <div className="text-xs mt-2 font-semibold animate-pulse" style={{ color: '#10b981' }}>
+                    🏆 Perfect! You're unstoppable! 🏆
+                  </div>
+                )}
               </div>
               <div className="stat-card p-3 md:p-4 border rounded-lg text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-primary)' }}>
                 <div className="text-[10px] md:text-xs uppercase tracking-wide opacity-60 mb-1 md:mb-2">Total Reviews</div>
@@ -630,10 +766,49 @@ export const Statistics = () => {
                 <div className="text-[10px] md:text-xs uppercase tracking-wide opacity-60 mb-1 md:mb-2">Forgot</div>
                 <div className="text-xl md:text-3xl font-bold" style={{ color: '#ef4444' }}>{(buttonsPressedDataObj.Forgot || 0).toLocaleString()}</div>
               </div>
-              <div className="stat-card p-3 md:p-4 border rounded-lg text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-primary)' }}>
-                <div className="text-[10px] md:text-xs uppercase tracking-wide opacity-60 mb-1 md:mb-2">Remembered</div>
-                <div className="text-xl md:text-3xl font-bold" style={{ color: '#10b981' }}>
-                  {((buttonsPressedDataObj.Hard || 0) + (buttonsPressedDataObj.Good || 0) + (buttonsPressedDataObj.Easy || 0)).toLocaleString()}
+              
+              {/* Remembered card with hidden Easter Bunny */}
+              <div 
+                className="relative cursor-pointer"
+                style={{ overflow: 'visible' }}
+                onMouseEnter={() => setShowEasterBunny(true)}
+                onMouseLeave={() => setShowEasterBunny(false)}
+                onClick={() => setShowEasterBunny(!showEasterBunny)}
+              >
+                {/* Easter Bunny behind the card */}
+                <div 
+                  className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                  style={{
+                    opacity: showEasterBunny ? 1 : 0,
+                    transition: 'opacity 1s ease-in-out',
+                    zIndex: 0,
+                    left: '-10px'
+                  }}
+                >
+                  <div className="text-6xl animate-bounce">🐰</div>
+                </div>
+                
+                {/* The actual card that slides */}
+                <div 
+                  className="stat-card p-3 md:p-4 border rounded-lg text-center"
+                  style={{ 
+                    borderColor: 'var(--rn-clr-border-primary)', 
+                    backgroundColor: 'var(--rn-clr-background-primary)',
+                    transform: showEasterBunny ? 'translateX(70px)' : 'translateX(0)',
+                    transition: 'transform 1.8s cubic-bezier(0.68, -0.55, 0.265, 1.55)',
+                    position: 'relative',
+                    zIndex: 1
+                  }}
+                >
+                  <div className="text-[10px] md:text-xs uppercase tracking-wide opacity-60 mb-1 md:mb-2">Remembered</div>
+                  <div className="text-xl md:text-3xl font-bold" style={{ color: '#10b981' }}>
+                    {((buttonsPressedDataObj.Hard || 0) + (buttonsPressedDataObj.Good || 0) + (buttonsPressedDataObj.Easy || 0)).toLocaleString()}
+                  </div>
+                  {showEasterBunny && (
+                    <div className="text-[8px] md:text-[10px] mt-1 opacity-70 animate-pulse" style={{ color: '#10b981' }}>
+                      🥕 Peek-a-boo!
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -658,6 +833,23 @@ export const Statistics = () => {
 
             <div className="chart-container">
               {chart_repetionsCompounded(filteredCards)}
+            </div>
+
+            <div className="chart-container">
+              {chart_retention_rate_over_time(
+                retentionRateOverTimeData,
+                retentionRateWeeklyMA,
+                retentionRateMonthlyMA,
+                retentionRateCumulativeAvg,
+                'Retention rate over time'
+              )}
+            </div>
+
+            <div className="chart-container">
+              {chart_retention_by_time_of_day(
+                timeOfDayRetentionData,
+                'Retention rate by time of day'
+              )}
             </div>
             </div>
           </div>
@@ -713,8 +905,201 @@ export const Statistics = () => {
               )}
             </div>
           </div>
+
+          <div className="section-divider"></div>
+
+          {/* SECTION 4: HARDEST FLASHCARDS */}
+          <div className="mb-6 md:mb-8 fade-in">
+            <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 md:gap-4 mb-4 md:mb-6">
+              <div className="flex items-center gap-2 md:gap-3">
+                <div className="p-1.5 md:p-2 rounded-lg" style={{ backgroundColor: 'var(--rn-clr-background-secondary)' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 md:w-6 md:h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#ef4444' }}>
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                    <line x1="12" y1="9" x2="12" y2="13"></line>
+                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                  </svg>
+                </div>
+                <div>
+                  <div className="font-bold text-lg md:text-xl">Hardest Flashcards</div>
+                  <div className="text-xs md:text-sm opacity-60 hidden sm:block">Cards with lowest retention rate (min. 3 reviews)</div>
+                </div>
+              </div>
+              <div className="flex gap-1 md:gap-2 text-xs md:text-sm p-1 md:p-1.5 rounded-lg" style={{ backgroundColor: 'var(--rn-clr-background-secondary)', border: '1px solid var(--rn-clr-border-primary)' }}>
+                {[
+                  { label: 'Top 10', val: 10 },
+                  { label: 'Top 20', val: 20 },
+                  { label: 'Top 50', val: 50 }
+                ].map(opt => (
+                  <button
+                    key={opt.label}
+                    onClick={() => setHardestCardsLimit(opt.val)}
+                    className="px-2 md:px-4 py-1 md:py-2 rounded-md transition-all smooth-transition font-medium text-xs md:text-sm"
+                    style={hardestCardsLimit === opt.val 
+                      ? { backgroundColor: '#ef4444', color: '#fff', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
+                      : { color: 'var(--rn-clr-content-secondary)' }
+                    }
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {hardestCardsData.length === 0 ? (
+              <div className="stat-card p-6 md:p-8 border rounded-lg text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-secondary)' }}>
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-12 h-12 mx-auto mb-3 opacity-40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <path d="M16 16s-1.5-2-4-2-4 2-4 2"></path>
+                  <line x1="9" y1="9" x2="9.01" y2="9"></line>
+                  <line x1="15" y1="9" x2="15.01" y2="9"></line>
+                </svg>
+                <div className="text-sm opacity-60">No difficult cards found with 3+ reviews</div>
+                <div className="text-xs opacity-40 mt-1">Keep studying to collect more data!</div>
+              </div>
+            ) : (
+              <div className="border rounded-lg overflow-hidden" style={{ borderColor: 'var(--rn-clr-border-primary)' }}>
+                {/* Table Header */}
+                <div className="grid grid-cols-12 gap-2 p-3 text-xs font-semibold uppercase tracking-wide opacity-70" style={{ backgroundColor: 'var(--rn-clr-background-tertiary)' }}>
+                  <div className="col-span-1 text-center">#</div>
+                  <div className="col-span-5 md:col-span-6">Flashcard</div>
+                  <div className="col-span-2 text-center hidden sm:block">Reviews</div>
+                  <div className="col-span-2 text-center hidden sm:block">Forgot</div>
+                  <div className="col-span-6 sm:col-span-2 text-center">Retention</div>
+                </div>
+                {/* Table Body */}
+                <div className="divide-y" style={{ borderColor: 'var(--rn-clr-border-primary)' }}>
+                  {hardestCardsData.map((card, index) => (
+                    <HardestCardRow 
+                      key={card.cardId}
+                      card={card}
+                      index={index}
+                      plugin={plugin}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </>
       )}
+      </div>
+    </div>
+  );
+}
+
+// --- Hardest Card Row Component ---
+
+interface HardestCardRowProps {
+  card: HardCardData;
+  index: number;
+  plugin: ReturnType<typeof usePlugin>;
+}
+
+function HardestCardRow({ card, index, plugin }: HardestCardRowProps) {
+  const [remText, setRemText] = React.useState<string>('Loading...');
+  const [isHovered, setIsHovered] = React.useState(false);
+
+  // Fetch the Rem text
+  React.useEffect(() => {
+    let cancelled = false;
+    
+    async function fetchRemText() {
+      try {
+        const rem = await plugin.rem.findOne(card.remId);
+        if (cancelled) return;
+        
+        if (!rem) {
+          setRemText('(Rem not found)');
+          return;
+        }
+        
+        const text = rem.text ? await plugin.richText.toString(rem.text) : null;
+        if (cancelled) return;
+        
+        if (text && text.trim().length > 0) {
+          // Truncate long text
+          const truncated = text.length > 80 ? text.substring(0, 80) + '...' : text;
+          setRemText(truncated);
+        } else {
+          setRemText('(Untitled)');
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setRemText('(Error loading)');
+        }
+      }
+    }
+
+    fetchRemText();
+    return () => { cancelled = true; };
+  }, [card.remId, plugin]);
+
+  const handleClick = async () => {
+    try {
+      const rem = await plugin.rem.findOne(card.remId);
+      if (rem) {
+        await plugin.window.openRem(rem);
+      }
+    } catch (error) {
+      console.error('Stats Plugin: Error opening Rem:', error);
+    }
+  };
+
+  // Color based on retention rate (red for low, yellow for medium)
+  const getRetentionColor = (rate: number) => {
+    if (rate <= 30) return '#ef4444'; // red
+    if (rate <= 50) return '#f97316'; // orange
+    if (rate <= 70) return '#eab308'; // yellow
+    return '#22c55e'; // green
+  };
+
+  return (
+    <div 
+      className="grid grid-cols-12 gap-2 p-3 items-center cursor-pointer transition-all"
+      style={{ 
+        backgroundColor: isHovered ? 'var(--rn-clr-background-tertiary)' : 'var(--rn-clr-background-primary)',
+      }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onClick={handleClick}
+    >
+      {/* Rank */}
+      <div className="col-span-1 text-center">
+        <span className="text-sm font-medium opacity-60">{index + 1}</span>
+      </div>
+      
+      {/* Flashcard Text */}
+      <div className="col-span-5 md:col-span-6">
+        <div 
+          className="text-sm truncate hover:underline"
+          style={{ color: isHovered ? 'var(--rn-clr-link)' : 'var(--rn-clr-content-primary)' }}
+          title={remText}
+        >
+          {remText}
+        </div>
+      </div>
+      
+      {/* Reviews Count */}
+      <div className="col-span-2 text-center hidden sm:block">
+        <span className="text-sm">{card.totalReviews}</span>
+      </div>
+      
+      {/* Forgot Count */}
+      <div className="col-span-2 text-center hidden sm:block">
+        <span className="text-sm" style={{ color: '#ef4444' }}>{card.forgotCount}</span>
+      </div>
+      
+      {/* Retention Rate */}
+      <div className="col-span-6 sm:col-span-2 text-center">
+        <span 
+          className="inline-block px-2 py-1 rounded-full text-xs font-semibold"
+          style={{ 
+            backgroundColor: `${getRetentionColor(card.retentionRate)}20`,
+            color: getRetentionColor(card.retentionRate)
+          }}
+        >
+          {card.retentionRate.toFixed(1)}%
+        </span>
       </div>
     </div>
   );
@@ -933,6 +1318,199 @@ function chart_repetionsCompounded(allCards: Card[] | undefined) {
     width="100%"
     height="300"
   /></div>
+}
+
+function chart_retention_rate_over_time(
+  dailyData: Array<{x: number, y: number}>,
+  weeklyMA: Array<{x: number, y: number}>,
+  monthlyMA: Array<{x: number, y: number}>,
+  cumulativeAvg: Array<{x: number, y: number}>,
+  title: string
+) {
+  if (!dailyData || dailyData.length === 0) return <div/>;
+
+  const options = {
+    ...getCommonChartOptions(title, 'datetime'),
+    dataLabels: { enabled: false },
+    stroke: {
+      curve: 'smooth' as const,
+      width: [3, 2, 2, 2],
+      dashArray: [0, 4, 6, 2]
+    },
+    colors: [chartColor, '#10b981', '#f59e0b', '#8b5cf6'],
+    legend: {
+      show: true,
+      position: 'top' as const,
+      horizontalAlign: 'right' as const,
+      labels: { colors: 'var(--rn-clr-content-primary)' },
+      onItemClick: { toggleDataSeries: true },
+      onItemHover: { highlightDataSeries: true }
+    },
+    yaxis: {
+      min: 0,
+      max: 100,
+      tickAmount: 5,
+      labels: {
+        style: { colors: 'var(--rn-clr-content-primary)' },
+        formatter: function (val: number) {
+          return val.toFixed(1) + '%';
+        }
+      }
+    },
+    tooltip: {
+      theme: 'light' as const,
+      x: { format: 'dd MMM yyyy' },
+      y: {
+        formatter: function(val: number) {
+          return val.toFixed(1) + '%';
+        },
+        title: { formatter: (seriesName: string) => seriesName }
+      }
+    },
+    markers: {
+      size: 0,
+      hover: { size: 5 }
+    }
+  };
+
+  const series = [
+    { name: 'Retention (Daily)', data: dailyData },
+    { name: 'Retention (7d MA)', data: weeklyMA },
+    { name: 'Retention (30d MA)', data: monthlyMA },
+    { name: 'Retention (Cumulative Avg)', data: cumulativeAvg }
+  ];
+
+  return <div>
+  <Chart
+    options={options}
+    type="line"
+    width="100%"
+    height="300"
+    series={series}
+  /></div>;
+}
+
+function chart_retention_by_time_of_day(
+  data: TimeOfDayRetention[],
+  title: string
+) {
+  if (!data || data.length === 0) return <div/>;
+
+  // Filter out blocks with no reviews
+  const blocksWithData = data.filter(block => block.totalReviews > 0);
+
+  if (blocksWithData.length === 0) {
+    return <div className="p-8 text-center opacity-60">
+      <div className="text-sm">No data available</div>
+      <div className="text-xs mt-1">Review some flashcards to see your productivity patterns</div>
+    </div>;
+  }
+
+  // Prepare data for chart
+  const chartData = blocksWithData.map(block => ({
+    x: block.timeBlock,
+    y: block.retentionRate,
+    reviews: block.totalReviews,
+    forgot: block.forgotCount,
+    remembered: block.rememberedCount
+  }));
+
+  // Find the best time (highest retention)
+  const bestBlock = blocksWithData.reduce((max, block) => 
+    block.retentionRate > max.retentionRate ? block : max
+  , blocksWithData[0]);
+
+  const options = {
+    ...getCommonChartOptions(title, 'category'),
+    dataLabels: {
+      enabled: true,
+      formatter: function (val: number) {
+        return val.toFixed(1) + '%';
+      },
+      style: {
+        colors: ['var(--rn-clr-content-primary)'],
+        fontSize: '11px',
+        fontWeight: 600
+      },
+      offsetY: -20,
+    },
+    plotOptions: {
+      bar: {
+        dataLabels: { position: 'top' as const },
+        distributed: true,
+        borderRadius: 4
+      }
+    },
+    colors: chartData.map(d => {
+      // Color code based on retention rate
+      if (d.y >= 80) return '#10b981'; // green
+      if (d.y >= 70) return '#84cc16'; // lime
+      if (d.y >= 60) return '#eab308'; // yellow
+      if (d.y >= 50) return '#f97316'; // orange
+      return '#ef4444'; // red
+    }),
+    xaxis: {
+      ...getCommonChartOptions(title, 'category').xaxis,
+      labels: {
+        style: { colors: 'var(--rn-clr-content-primary)' },
+        rotate: -45,
+        rotateAlways: true,
+        hideOverlappingLabels: false
+      }
+    },
+    yaxis: {
+      min: 0,
+      max: 100,
+      tickAmount: 5,
+      labels: {
+        style: { colors: 'var(--rn-clr-content-primary)' },
+        formatter: function (val: number) {
+          return val.toFixed(0) + '%';
+        }
+      }
+    },
+    tooltip: {
+      theme: 'light' as const,
+      y: {
+        formatter: function(val: number, opts: any) {
+          const dataPoint = chartData[opts.dataPointIndex];
+          return `
+            <div style="padding: 4px 0;">
+              <div><strong>Retention:</strong> ${val.toFixed(1)}%</div>
+              <div><strong>Total Reviews:</strong> ${dataPoint.reviews}</div>
+              <div><strong>Remembered:</strong> ${dataPoint.remembered}</div>
+              <div><strong>Forgot:</strong> ${dataPoint.forgot}</div>
+            </div>
+          `;
+        },
+        title: { formatter: () => '' }
+      }
+    },
+    legend: {
+      show: false
+    }
+  };
+
+  return <div>
+    {bestBlock && (
+      <div className="stat-card p-3 md:p-4 border rounded-lg mb-4 md:mb-6 text-center" style={{borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-secondary)' }}>
+        <div className="text-xs md:text-sm opacity-70 mb-1">🎯 Most Productive Time</div>
+        <div className="text-lg font-bold" style={{ color: '#10b981' }}>
+          {bestBlock.timeBlock}
+        </div>
+        <div className="text-sm opacity-60">
+          {bestBlock.retentionRate.toFixed(1)}% retention rate ({bestBlock.totalReviews} reviews)
+        </div>
+      </div>
+    )}
+    <Chart
+      options={options}
+      type="bar"
+      width="100%"
+      height="300"
+      series={[{ name: 'Retention Rate', data: chartData }]}
+    />
+  </div>;
 }
 
 renderWidget(Statistics);
