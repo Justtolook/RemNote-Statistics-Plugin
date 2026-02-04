@@ -8,6 +8,10 @@ import React from 'react';
 export const QueueToolbarButton = () => {
   const plugin = usePlugin();
 
+  // Detect if device is a small mobile device (smartphone, not tablet)
+  const isSmallMobile = window.innerWidth < 780 && // Width less than tablet breakpoint
+    ('ontouchstart' in window || navigator.maxTouchPoints > 0); // Touch device
+
   const handleClick = async () => {
     // Get the current focused Rem for context
     const focusedRem = await plugin.focus.getFocusedRem();
@@ -40,7 +44,13 @@ export const QueueToolbarButton = () => {
         fontSize: '0.875rem',
         fontWeight: '500',
         transition: 'all 0.2s ease',
-        whiteSpace: 'nowrap'
+        margin: '0 0.5rem',
+        whiteSpace: 'nowrap',
+        ...(isSmallMobile && {
+          marginLeft: '1rem',
+          marginRight: '1rem',
+          marginBottom: '0.5rem'
+        })
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.backgroundColor = 'var(--rn-clr-background-tertiary)';
@@ -71,6 +81,21 @@ export const QueueToolbarButton = () => {
         <line x1="6" y1="20" x2="6" y2="14"></line>
       </svg>
       <span>Statistics</span>
+      <span
+        style={{
+          fontSize: '0.625rem',
+          fontWeight: '700',
+          color: 'white',
+          backgroundColor: '#ef4444',
+          padding: '0.125rem 0.25rem',
+          borderRadius: '3px',
+          letterSpacing: '0.025em',
+          textTransform: 'uppercase',
+          lineHeight: '1'
+        }}
+      >
+        NEW
+      </span>
     </button>
   );
 };
