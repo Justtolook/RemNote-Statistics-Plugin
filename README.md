@@ -87,7 +87,7 @@ The dashboard is organized into four main sections:
      - Retention Rate Over Time (with smoothing options)
 
 4. **Outlook Section**
-   - Select forecast period (7, 14, 30, 60, 90 days)
+   - Select forecast period (Week, Month, Year)
    - View total due cards for the period
    - Bar chart showing daily due cards distribution
 
