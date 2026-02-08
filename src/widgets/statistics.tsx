@@ -29,7 +29,12 @@ import {
   getHardestCards,
   HardCardData,
   getRetentionRateByTimeOfDay,
-  TimeOfDayRetention
+  TimeOfDayRetention,
+  getTimeSpentPerDay,
+  calculateTimeStatsSummary,
+  formatTime,
+  DailyTimeStats,
+  TimeStatsSummary
 } from '../lib/dataProcessing';
 
 type RangeMode = 'Today' | 'Yesterday' | 'Week' | 'This Week' | 'Last Week' | 'Month' | 'This Month' | 'Last Month' | 'Year' | 'This Year' | 'Last Year' | 'All';
@@ -324,6 +329,19 @@ export const Statistics = () => {
   const timeOfDayRetentionData = React.useMemo(() => {
     return getRetentionRateByTimeOfDay(filteredCards);
   }, [filteredCards]);
+
+  // Time statistics data
+  const timeStatsData = React.useMemo(() => {
+    const startTs = dateStart ? new Date(dateStart).getTime() : 0;
+    const endTs = dateEnd ? new Date(dateEnd).getTime() + (24 * 60 * 60 * 1000) : Infinity;
+    return getTimeSpentPerDay(activeCardsSource, startTs, endTs);
+  }, [activeCardsSource, dateStart, dateEnd]);
+
+  const timeStatsSummary = React.useMemo(() => {
+    const startTs = dateStart ? new Date(dateStart).getTime() : undefined;
+    const endTs = dateEnd ? new Date(dateEnd).getTime() + (24 * 60 * 60 * 1000) : undefined;
+    return calculateTimeStatsSummary(timeStatsData, startTs, endTs);
+  }, [timeStatsData, dateStart, dateEnd]);
 
   // -- Styles --
   const containerStyle = getContainerStyle();
@@ -720,7 +738,7 @@ export const Statistics = () => {
             </div>
 
             {/* Metrics Grid */}
-            <div className="mb-6 md:mb-8 grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4">
+            <div className="mb-6 md:mb-8 grid grid-cols-2 lg:grid-cols-5 gap-2 md:gap-4">
               <div className="stat-card p-3 md:p-4 border rounded-lg text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-primary)' }}>
                 <div className="text-[10px] md:text-xs uppercase tracking-wide opacity-60 mb-1 md:mb-2 flex items-center justify-center gap-1">
                   Retention Rate
@@ -811,6 +829,41 @@ export const Statistics = () => {
                   )}
                 </div>
               </div>
+
+              {/* Time Spent Card */}
+              <div className="stat-card p-3 md:p-4 border rounded-lg text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-primary)' }}>
+                <div className="text-[10px] md:text-xs uppercase tracking-wide opacity-60 mb-1 md:mb-2 flex items-center justify-center gap-1">
+                  Time Spent
+                  <div 
+                    className="opacity-50 hover:opacity-100 cursor-help transition-opacity"
+                    title="Total time spent reviewing flashcards in the selected time period"
+                  >
+                    <svg 
+                      xmlns="http://www.w3.org/2000/svg" 
+                      width="14" 
+                      height="14" 
+                      viewBox="0 0 24 24" 
+                      fill="none" 
+                      stroke="currentColor" 
+                      strokeWidth="2" 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round"
+                    >
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <line x1="12" y1="16" x2="12" y2="12"></line>
+                      <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                    </svg>
+                  </div>
+                </div>
+                <div className="text-xl md:text-3xl font-bold" style={{ color: '#f59e0b' }}>
+                  {formatTime(timeStatsSummary.totalTimeMs)}
+                </div>
+                {timeStatsSummary.totalTimeMs > 0 && (
+                  <div className="text-[8px] md:text-[10px] mt-1 opacity-70">
+                    {formatTime(timeStatsSummary.averageTimePerReviewDay)}/day studied
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="space-y-4 md:space-y-6">
@@ -849,6 +902,14 @@ export const Statistics = () => {
               {chart_retention_by_time_of_day(
                 timeOfDayRetentionData,
                 'Retention rate by time of day'
+              )}
+            </div>
+
+            <div className="chart-container">
+              {chart_time_spent(
+                timeStatsData,
+                timeStatsSummary,
+                'Time spent reviewing'
               )}
             </div>
             </div>
@@ -1509,6 +1570,117 @@ function chart_retention_by_time_of_day(
       width="100%"
       height="300"
       series={[{ name: 'Retention Rate', data: chartData }]}
+    />
+  </div>;
+}
+
+function chart_time_spent(
+  timeData: DailyTimeStats[],
+  summary: TimeStatsSummary,
+  title: string
+) {
+  if (!timeData || timeData.length === 0) return <div className="p-8 text-center opacity-60">
+    <div className="text-sm">No time data available</div>
+    <div className="text-xs mt-1">Time tracking data will appear as you review flashcards</div>
+  </div>;
+
+  // Prepare data for bar chart (time in minutes per day)
+  const chartData = timeData.map(day => ({
+    x: day.date,
+    y: Math.round((day.timeMs / 1000 / 60) * 10) / 10 // Convert to minutes, round to 1 decimal
+  }));
+
+  const options = {
+    ...getCommonChartOptions(title, 'datetime'),
+    dataLabels: { enabled: false },
+    plotOptions: {
+      bar: {
+        borderRadius: 2,
+        columnWidth: '85%'
+      }
+    },
+    colors: ['#f59e0b'], // amber color for time
+    xaxis: {
+      ...getCommonChartOptions(title, 'datetime').xaxis,
+      type: 'datetime' as const,
+      labels: {
+        format: 'MMM dd',
+        style: { colors: 'var(--rn-clr-content-primary)' }
+      }
+    },
+    yaxis: {
+      decimalsInFloat: 1,
+      labels: { 
+        style: { colors: 'var(--rn-clr-content-primary)' },
+        formatter: function(val: number) {
+          return val.toFixed(1) + 'm';
+        }
+      },
+      title: {
+        text: 'Time (minutes)',
+        style: { color: 'var(--rn-clr-content-primary)' }
+      }
+    },
+    tooltip: {
+      theme: 'light' as const,
+      x: { format: 'dd MMM yyyy' },
+      y: {
+        formatter: function(val: number, opts: any) {
+          const dayIndex = opts.dataPointIndex;
+          const reviews = timeData[dayIndex]?.reviewCount || 0;
+          return `${val.toFixed(1)} minutes (${reviews} reviews)`;
+        }
+      }
+    }
+  };
+
+  return <div>
+    {/* Summary Statistics */}
+    <div className="mb-4 md:mb-6 p-4 border rounded-lg" style={{ 
+      borderColor: 'var(--rn-clr-border-primary)', 
+      backgroundColor: 'var(--rn-clr-background-secondary)' 
+    }}>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="text-center">
+          <div className="text-xs opacity-60 mb-1">Total Time</div>
+          <div className="text-lg font-bold" style={{ color: '#f59e0b' }}>
+            {formatTime(summary.totalTimeMs, 'hours')}
+          </div>
+        </div>
+        <div className="text-center">
+          <div className="text-xs opacity-60 mb-1">Avg per Day</div>
+          <div className="text-lg font-bold" style={{ color: '#f59e0b' }}>
+            {formatTime(summary.averageTimePerDay)}
+          </div>
+        </div>
+        <div className="text-center">
+          <div className="text-xs opacity-60 mb-1">Avg per Study Day</div>
+          <div className="text-lg font-bold" style={{ color: '#f59e0b' }}>
+            {formatTime(summary.averageTimePerReviewDay)}
+          </div>
+        </div>
+        <div className="text-center">
+          <div className="text-xs opacity-60 mb-1">Avg per Card</div>
+          <div className="text-lg font-bold" style={{ color: '#f59e0b' }}>
+            {formatTime(summary.averageTimePerCard, 'seconds')} 
+            <span className="text-xs opacity-60 ml-1">
+              ({summary.cardsPerMinute.toFixed(1)}/min)
+            </span>
+          </div>
+        </div>
+      </div>
+      <div className="mt-3 text-xs text-center opacity-60">
+        Days studied: {summary.daysWithReviews} of {summary.totalDaysInPeriod} ({summary.totalDaysInPeriod > 0 ? ((summary.daysWithReviews / summary.totalDaysInPeriod) * 100).toFixed(1) : 0}%)
+      </div>
+    </div>
+
+    {/* Chart */}
+    <Chart
+      options={options}
+      type="bar"
+      width="100%"
+      height="300"
+      series={[{ name: 'Time Spent', data: chartData }]}
     />
   </div>;
 }

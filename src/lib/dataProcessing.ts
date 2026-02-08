@@ -521,3 +521,168 @@ export function getRetentionRateByTimeOfDay(allCards: Card[] | undefined): TimeO
   return blockStats;
 }
 
+/**
+ * Represents time statistics for a specific day
+ */
+export interface DailyTimeStats {
+  date: number; // Unix timestamp
+  timeMs: number; // Total time in milliseconds
+  reviewCount: number; // Number of reviews
+}
+
+/**
+ * Gets time spent per day from card repetition history
+ * @param allCards - Array of all cards to analyze
+ * @param startLimit - Start date timestamp (default: 0)
+ * @param endLimit - End date timestamp (default: Infinity)
+ * @returns Array of daily time statistics
+ */
+export function getTimeSpentPerDay(
+  allCards: Card[] | undefined,
+  startLimit: number = 0,
+  endLimit: number = Infinity
+): DailyTimeStats[] {
+  if (!allCards || allCards.length === 0) return [];
+
+  const dailyStats = new Map<string, { timeMs: number; count: number }>();
+
+  for (const card of allCards) {
+    const history = card.repetitionHistory;
+    if (!history) continue;
+
+    for (const rep of history) {
+      if (rep.date < startLimit || rep.date > endLimit) continue;
+      if (rep.date <= LIMIT) continue;
+      if (!rep.responseTime || rep.responseTime <= 0) continue;
+
+      const dayKey = new Date(rep.date).toDateString();
+      const stats = dailyStats.get(dayKey) || { timeMs: 0, count: 0 };
+      stats.timeMs += rep.responseTime;
+      stats.count += 1;
+      dailyStats.set(dayKey, stats);
+    }
+  }
+
+  if (dailyStats.size === 0) return [];
+
+  const result: DailyTimeStats[] = [];
+  for (const [dayKey, stats] of dailyStats) {
+    result.push({
+      date: new Date(dayKey).getTime(),
+      timeMs: stats.timeMs,
+      reviewCount: stats.count
+    });
+  }
+
+  result.sort((a, b) => a.date - b.date);
+  return result;
+}
+
+/**
+ * Overall time statistics summary
+ */
+export interface TimeStatsSummary {
+  totalTimeMs: number;
+  totalReviews: number;
+  daysWithReviews: number;
+  totalDaysInPeriod: number;
+  averageTimePerDay: number; // Average over all days in period (ms)
+  averageTimePerReviewDay: number; // Average over days with reviews (ms)
+  averageTimePerCard: number; // Average time per card review (ms)
+  cardsPerMinute: number; // Average cards per minute
+}
+
+/**
+ * Calculates overall time statistics from daily data
+ * @param dailyData - Array of daily time statistics
+ * @param startDate - Start of the period (for calculating total days)
+ * @param endDate - End of the period
+ * @returns Summary of time statistics
+ */
+export function calculateTimeStatsSummary(
+  dailyData: DailyTimeStats[],
+  startDate?: number,
+  endDate?: number
+): TimeStatsSummary {
+  if (dailyData.length === 0) {
+    return {
+      totalTimeMs: 0,
+      totalReviews: 0,
+      daysWithReviews: 0,
+      totalDaysInPeriod: 0,
+      averageTimePerDay: 0,
+      averageTimePerReviewDay: 0,
+      averageTimePerCard: 0,
+      cardsPerMinute: 0
+    };
+  }
+
+  const totalTimeMs = dailyData.reduce((sum, day) => sum + day.timeMs, 0);
+  const totalReviews = dailyData.reduce((sum, day) => sum + day.reviewCount, 0);
+  const daysWithReviews = dailyData.filter(day => day.reviewCount > 0).length;
+
+  // Calculate total days in period
+  let totalDaysInPeriod = dailyData.length;
+  if (startDate !== undefined && endDate !== undefined) {
+    const daysDiff = Math.ceil((endDate - startDate) / (24 * 60 * 60 * 1000));
+    totalDaysInPeriod = Math.max(daysDiff, dailyData.length);
+  }
+
+  const averageTimePerDay = totalDaysInPeriod > 0 ? totalTimeMs / totalDaysInPeriod : 0;
+  const averageTimePerReviewDay = daysWithReviews > 0 ? totalTimeMs / daysWithReviews : 0;
+  const averageTimePerCard = totalReviews > 0 ? totalTimeMs / totalReviews : 0;
+  
+  // Cards per minute: (totalReviews / (totalTimeMs / 60000))
+  const cardsPerMinute = totalTimeMs > 0 ? (totalReviews / (totalTimeMs / 60000)) : 0;
+
+  return {
+    totalTimeMs,
+    totalReviews,
+    daysWithReviews,
+    totalDaysInPeriod,
+    averageTimePerDay,
+    averageTimePerReviewDay,
+    averageTimePerCard,
+    cardsPerMinute
+  };
+}
+
+/**
+ * Format milliseconds to human-readable time string
+ * @param ms - Time in milliseconds
+ * @param format - Format type ('short' for "1h 23m", 'long' for "1 hour 23 minutes", 'hours' for "1.38h")
+ * @returns Formatted time string
+ */
+export function formatTime(ms: number, format: 'short' | 'long' | 'hours' | 'seconds' = 'short'): string {
+  if (ms === 0) return '0s';
+
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (format === 'hours') {
+    const hoursDecimal = ms / (1000 * 60 * 60);
+    return `${hoursDecimal.toFixed(2)}h`;
+  }
+
+  if (format === 'seconds') {
+    const secondsDecimal = ms / 1000;
+    return `${secondsDecimal.toFixed(2)}s`;
+  }
+
+  const parts: string[] = [];
+  
+  if (hours > 0) {
+    parts.push(format === 'long' ? `${hours} hour${hours > 1 ? 's' : ''}` : `${hours}h`);
+  }
+  if (minutes > 0) {
+    parts.push(format === 'long' ? `${minutes} minute${minutes > 1 ? 's' : ''}` : `${minutes}m`);
+  }
+  if (seconds > 0 && hours === 0) { // Only show seconds if less than an hour
+    parts.push(format === 'long' ? `${seconds} second${seconds > 1 ? 's' : ''}` : `${seconds}s`);
+  }
+
+  return parts.join(' ') || '0s';
+}
+
