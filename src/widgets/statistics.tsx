@@ -1670,7 +1670,7 @@ function chart_time_spent(
         </div>
       </div>
       <div className="mt-3 text-xs text-center opacity-60">
-        Days studied: {summary.daysWithReviews} of {summary.totalDaysInPeriod} ({summary.totalDaysInPeriod > 0 ? ((summary.daysWithReviews / summary.totalDaysInPeriod) * 100).toFixed(1) : 0}%)
+        Days studied: {summary.daysWithReviews} of {summary.totalDaysInPeriod} ({summary.percentageDaysStudied.toFixed(1)}%)
       </div>
     </div>
 

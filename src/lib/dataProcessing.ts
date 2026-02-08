@@ -590,6 +590,7 @@ export interface TimeStatsSummary {
   averageTimePerReviewDay: number; // Average over days with reviews (ms)
   averageTimePerCard: number; // Average time per card review (ms)
   cardsPerMinute: number; // Average cards per minute
+  percentageDaysStudied: number; // Percentage of days studied (0-100)
 }
 
 /**
@@ -613,7 +614,8 @@ export function calculateTimeStatsSummary(
       averageTimePerDay: 0,
       averageTimePerReviewDay: 0,
       averageTimePerCard: 0,
-      cardsPerMinute: 0
+      cardsPerMinute: 0,
+      percentageDaysStudied: 0
     };
   }
 
@@ -634,6 +636,8 @@ export function calculateTimeStatsSummary(
   
   // Cards per minute: (totalReviews / (totalTimeMs / 60000))
   const cardsPerMinute = totalTimeMs > 0 ? (totalReviews / (totalTimeMs / 60000)) : 0;
+  
+  const percentageDaysStudied = totalDaysInPeriod > 0 ? (daysWithReviews / totalDaysInPeriod) * 100 : 0;
 
   return {
     totalTimeMs,
@@ -643,7 +647,8 @@ export function calculateTimeStatsSummary(
     averageTimePerDay,
     averageTimePerReviewDay,
     averageTimePerCard,
-    cardsPerMinute
+    cardsPerMinute,
+    percentageDaysStudied
   };
 }
 
@@ -654,7 +659,11 @@ export function calculateTimeStatsSummary(
  * @returns Formatted time string
  */
 export function formatTime(ms: number, format: 'short' | 'long' | 'hours' | 'seconds' = 'short'): string {
-  if (ms === 0) return '0s';
+  if (ms === 0) {
+    if (format === 'hours') return '0.00h';
+    if (format === 'seconds') return '0.00s';
+    return '0s';
+  }
 
   const totalSeconds = Math.floor(ms / 1000);
   const hours = Math.floor(totalSeconds / 3600);
