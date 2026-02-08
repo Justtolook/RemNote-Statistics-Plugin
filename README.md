@@ -8,6 +8,13 @@ The RemNote Statistics Plugin transforms your flashcard review data into actiona
 
 ## ✨ Key Features
 
+### ⏱️ Time Tracking & Productivity
+- **Time Spent Statistics**: Track total time spent reviewing flashcards
+- **Time Spent Chart**: Bar chart showing daily review time in minutes (similar to Anki)
+- **Productivity Metrics**: View average time per day, per study day, and per card
+- **Study Efficiency**: Cards per minute rate and study day percentage
+- **Time Spent Card**: New metric card in Review Statistics section showing total time and daily averages
+
 ### 📈 Comprehensive Analytics Dashboard
 - **Retention Rate Tracking**: Monitor your recall success rate over time with daily, weekly (7-day moving average), monthly (30-day moving average), and cumulative average trend lines
 - **Review Heatmap**: GitHub-style heatmap showing your learning activity across days and weeks
@@ -79,12 +86,14 @@ The dashboard is organized into four main sections:
 3. **Review Statistics Section**
    - Retention rate card with success percentage
    - Total reviews count
+   - Time spent card with total time and daily average
    - Button distribution breakdown (Forgot vs. Remembered)
    - Interactive charts:
      - Buttons Pressed (with percentages)
      - Cards Grouped by Reviews
      - Cumulative Reviews Over Time
      - Retention Rate Over Time (with smoothing options)
+     - Time Spent Reviewing (daily time in minutes with summary statistics)
 
 4. **Outlook Section**
    - Select forecast period (Week, Month, Year)
@@ -108,10 +117,12 @@ The dashboard is organized into four main sections:
 
 ### For Students
 - **Track Study Consistency**: Use the heatmap to maintain daily learning streaks
+- **Monitor Study Time**: See exactly how much time you spend reviewing with detailed time statistics
 - **Identify Weak Areas**: Use the Hardest Flashcards section to find and improve problematic cards
 - **Plan Study Sessions**: Forecast view helps you anticipate heavy review days and the time of day chart helps you schedule reviews when you're most productive
 - **Target Problem Cards**: Click directly on difficult cards to review and improve their content
 - **Optimize Study Schedule**: Review the time of day chart to discover when you have the best retention and schedule important reviews accordingly
+- **Track Efficiency**: Monitor your cards per minute rate to improve review speed over time
 
 ### For Power Users
 - **Optimize Spaced Repetition**: Monitor retention rate trends to adjust your learning strategy
@@ -119,6 +130,25 @@ The dashboard is organized into four main sections:
 - **Data-Driven Decisions**: Use moving averages to see long-term retention trends beyond daily fluctuations
 
 ## 📋 Changelog
+
+
+### Version 1.6.0 (Current)
+**New Features:**
+- ⏱️ **Time Spent Reviewing Statistics**: Comprehensive time tracking for flashcard reviews
+  - New "Time Spent" metric card in Review Statistics section showing total review time
+  - **Time Spent Reviewing Chart**: Anki-style bar chart displaying daily time spent in minutes
+  - **Summary Statistics Panel**: View total time, average per day, average per study day, and average per card
+  - **Productivity Metrics**: Cards per minute rate and percentage of days studied
+  - **Smart Time Formatting**: Displays time in hours, minutes, or seconds depending on magnitude
+  - Uses `responseTime` data from RemNote's repetition history
+  - Gracefully handles missing time data with appropriate empty state messages
+
+**Technical Improvements:**
+- Added `getTimeSpentPerDay()` function for daily time aggregation
+- Added `calculateTimeStatsSummary()` for comprehensive time statistics
+- Added `formatTime()` utility with multiple format options
+- Enhanced TypeScript interfaces with `DailyTimeStats` and `TimeStatsSummary`
+- Updated grid layout to accommodate 5 metric cards in Review Statistics section
 
 
 ### Version 1.5.0
