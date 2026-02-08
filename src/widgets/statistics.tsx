@@ -1590,16 +1590,42 @@ function chart_time_spent(
     y: Math.round((day.timeMs / 1000 / 60) * 10) / 10 // Convert to minutes, round to 1 decimal
   }));
 
+  // Prepare cumulative time data (in hours)
+  let cumulativeTimeMs = 0;
+  const cumulativeData = timeData.map(day => {
+    cumulativeTimeMs += day.timeMs;
+    return {
+      x: day.date,
+      y: Math.round((cumulativeTimeMs / 1000 / 60 / 60) * 100) / 100 // Convert to hours, round to 2 decimals
+    };
+  });
+
   const options = {
     ...getCommonChartOptions(title, 'datetime'),
     dataLabels: { enabled: false },
+    stroke: {
+      width: [0, 2], // 0 for bars, 2 for area line
+      curve: 'smooth' as const
+    },
+    fill: {
+      type: ['solid', 'gradient'],
+      gradient: {
+        shade: 'light',
+        type: 'vertical',
+        shadeIntensity: 0.25,
+        inverseColors: false,
+        opacityFrom: 0.5,
+        opacityTo: 0.1,
+        stops: [0, 100]
+      }
+    },
     plotOptions: {
       bar: {
         borderRadius: 2,
         columnWidth: '85%'
       }
     },
-    colors: ['#f59e0b'], // amber color for time
+    colors: ['#f59e0b', '#3362f0'], // amber for daily time, blue for cumulative
     xaxis: {
       ...getCommonChartOptions(title, 'datetime').xaxis,
       type: 'datetime' as const,
@@ -1608,60 +1634,95 @@ function chart_time_spent(
         style: { colors: 'var(--rn-clr-content-primary)' }
       }
     },
-    yaxis: {
-      decimalsInFloat: 1,
-      labels: { 
-        style: { colors: 'var(--rn-clr-content-primary)' },
-        formatter: function(val: number) {
-          return val.toFixed(1) + 'm';
+    yaxis: [
+      {
+        // Left axis for daily time (minutes)
+        seriesName: 'Daily Time',
+        decimalsInFloat: 1,
+        labels: { 
+          style: { colors: 'var(--rn-clr-content-primary)' },
+          formatter: function(val: number) {
+            return val.toFixed(1) + 'm';
+          }
+        },
+        title: {
+          text: 'Time (minutes)',
+          style: { color: 'var(--rn-clr-content-primary)' }
         }
       },
-      title: {
-        text: 'Time (minutes)',
-        style: { color: 'var(--rn-clr-content-primary)' }
+      {
+        // Right axis for cumulative time (hours)
+        seriesName: 'Cumulative Time',
+        opposite: true,
+        decimalsInFloat: 1,
+        labels: { 
+          style: { colors: 'var(--rn-clr-content-primary)' },
+          formatter: function(val: number) {
+            return val.toFixed(1) + 'h';
+          }
+        },
+        title: {
+          text: 'Cumulative Time (hours)',
+          style: { color: 'var(--rn-clr-content-primary)' }
+        }
       }
-    },
+    ],
     tooltip: {
       theme: 'light' as const,
       x: { format: 'dd MMM yyyy' },
       y: {
         formatter: function(val: number, opts: any) {
-          const dayIndex = opts.dataPointIndex;
-          const reviews = timeData[dayIndex]?.reviewCount || 0;
-          return `${val.toFixed(1)} minutes (${reviews} reviews)`;
+          const seriesIndex = opts.seriesIndex;
+          if (seriesIndex === 0) {
+            // Daily time bar
+            const dayIndex = opts.dataPointIndex;
+            const reviews = timeData[dayIndex]?.reviewCount || 0;
+            return `${val.toFixed(1)} minutes (${reviews} reviews)`;
+          } else {
+            // Cumulative time area
+            return `${val.toFixed(2)} hours total`;
+          }
         }
+      }
+    },
+    legend: {
+      show: true,
+      position: 'top' as const,
+      horizontalAlign: 'center' as const,
+      labels: {
+        colors: 'var(--rn-clr-content-primary)'
       }
     }
   };
 
   return <div>
     {/* Summary Statistics */}
-    <div className="mb-4 md:mb-6 p-4 border rounded-lg" style={{ 
+    <div className="stat-card mb-4 md:mb-6 p-3 md:p-4 border rounded-lg" style={{ 
       borderColor: 'var(--rn-clr-border-primary)', 
-      backgroundColor: 'var(--rn-clr-background-secondary)' 
+      backgroundColor: 'var(--rn-clr-background-primary)' 
     }}>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         <div className="text-center">
-          <div className="text-xs opacity-60 mb-1">Total Time</div>
-          <div className="text-lg font-bold" style={{ color: '#f59e0b' }}>
+          <div className="text-[10px] md:text-xs uppercase tracking-wide opacity-60 mb-1 md:mb-2">Total Time</div>
+          <div className="text-lg md:text-xl font-bold" style={{ color: '#f59e0b' }}>
             {formatTime(summary.totalTimeMs, 'hours')}
           </div>
         </div>
         <div className="text-center">
-          <div className="text-xs opacity-60 mb-1">Avg per Day</div>
-          <div className="text-lg font-bold" style={{ color: '#f59e0b' }}>
+          <div className="text-[10px] md:text-xs uppercase tracking-wide opacity-60 mb-1 md:mb-2">Avg per Day</div>
+          <div className="text-lg md:text-xl font-bold" style={{ color: '#f59e0b' }}>
             {formatTime(summary.averageTimePerDay)}
           </div>
         </div>
         <div className="text-center">
-          <div className="text-xs opacity-60 mb-1">Avg per Study Day</div>
-          <div className="text-lg font-bold" style={{ color: '#f59e0b' }}>
+          <div className="text-[10px] md:text-xs uppercase tracking-wide opacity-60 mb-1 md:mb-2">Avg per Study Day</div>
+          <div className="text-lg md:text-xl font-bold" style={{ color: '#f59e0b' }}>
             {formatTime(summary.averageTimePerReviewDay)}
           </div>
         </div>
         <div className="text-center">
-          <div className="text-xs opacity-60 mb-1">Avg per Card</div>
-          <div className="text-lg font-bold" style={{ color: '#f59e0b' }}>
+          <div className="text-[10px] md:text-xs uppercase tracking-wide opacity-60 mb-1 md:mb-2">Avg per Card</div>
+          <div className="text-lg md:text-xl font-bold" style={{ color: '#f59e0b' }}>
             {formatTime(summary.averageTimePerCard, 'seconds')} 
             <span className="text-xs opacity-60 ml-1">
               ({summary.cardsPerMinute.toFixed(1)}/min)
@@ -1669,7 +1730,7 @@ function chart_time_spent(
           </div>
         </div>
       </div>
-      <div className="mt-3 text-xs text-center opacity-60">
+      <div className="mt-2 md:mt-3 text-[10px] md:text-xs text-center opacity-60">
         Days studied: {summary.daysWithReviews} of {summary.totalDaysInPeriod} ({summary.percentageDaysStudied.toFixed(1)}%)
       </div>
     </div>
@@ -1677,10 +1738,21 @@ function chart_time_spent(
     {/* Chart */}
     <Chart
       options={options}
-      type="bar"
+      type="line"
       width="100%"
       height="300"
-      series={[{ name: 'Time Spent', data: chartData }]}
+      series={[
+        { 
+          name: 'Daily Time', 
+          type: 'bar',
+          data: chartData 
+        },
+        { 
+          name: 'Cumulative Time', 
+          type: 'area',
+          data: cumulativeData 
+        }
+      ]}
     />
   </div>;
 }
