@@ -623,12 +623,22 @@ export function calculateTimeStatsSummary(
   const totalReviews = dailyData.reduce((sum, day) => sum + day.reviewCount, 0);
   const daysWithReviews = dailyData.filter(day => day.reviewCount > 0).length;
 
-  // Calculate total days in period
-  let totalDaysInPeriod = dailyData.length;
-  if (startDate !== undefined && endDate !== undefined) {
-    const daysDiff = Math.ceil((endDate - startDate) / (24 * 60 * 60 * 1000));
-    totalDaysInPeriod = Math.max(daysDiff, dailyData.length);
-  }
+  // Calculate the full calendar span, including days without reviews. For open
+  // date ranges, use the first and last days represented by the available data.
+  const dayMs = 24 * 60 * 60 * 1000;
+  const firstReviewDay = Math.min(...dailyData.map(day => day.date));
+  const lastReviewDayEnd = new Date(Math.max(...dailyData.map(day => day.date)));
+  lastReviewDayEnd.setDate(lastReviewDayEnd.getDate() + 1);
+  const periodStart = startDate ?? firstReviewDay;
+  const periodEnd = endDate ?? lastReviewDayEnd.getTime();
+  const startDay = new Date(periodStart);
+  const endDay = new Date(periodEnd);
+  const startCalendarDay = Date.UTC(startDay.getFullYear(), startDay.getMonth(), startDay.getDate());
+  const endCalendarDay = Date.UTC(endDay.getFullYear(), endDay.getMonth(), endDay.getDate());
+  const totalDaysInPeriod = Math.max(
+    Math.round((endCalendarDay - startCalendarDay) / dayMs),
+    dailyData.length
+  );
 
   const averageTimePerDay = totalDaysInPeriod > 0 ? totalTimeMs / totalDaysInPeriod : 0;
   const averageTimePerReviewDay = daysWithReviews > 0 ? totalTimeMs / daysWithReviews : 0;
@@ -694,4 +704,3 @@ export function formatTime(ms: number, format: 'short' | 'long' | 'hours' | 'sec
 
   return parts.join(' ') || '0s';
 }
-
