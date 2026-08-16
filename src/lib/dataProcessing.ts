@@ -521,3 +521,398 @@ export function getRetentionRateByTimeOfDay(allCards: Card[] | undefined): TimeO
   return blockStats;
 }
 
+/**
+ * Represents time statistics for a specific day
+ */
+export interface DailyTimeStats {
+  date: number; // Unix timestamp
+  timeMs: number; // Total time in milliseconds
+  reviewCount: number; // Number of reviews
+  responseTimesMs: number[]; // Individual valid response times
+}
+
+/**
+ * Gets time spent per day from card repetition history
+ * @param allCards - Array of all cards to analyze
+ * @param startLimit - Start date timestamp (default: 0)
+ * @param endLimit - End date timestamp (default: Infinity)
+ * @returns Array of daily time statistics
+ */
+export function getTimeSpentPerDay(
+  allCards: Card[] | undefined,
+  startLimit: number = 0,
+  endLimit: number = Infinity
+): DailyTimeStats[] {
+  if (!allCards || allCards.length === 0) return [];
+
+  const dailyStats = new Map<string, { timeMs: number; count: number; responseTimesMs: number[] }>();
+
+  for (const card of allCards) {
+    const history = card.repetitionHistory;
+    if (!history) continue;
+
+    for (const rep of history) {
+      if (rep.date < startLimit || rep.date > endLimit) continue;
+      if (rep.date <= LIMIT) continue;
+      if (!rep.responseTime || rep.responseTime <= 0) continue;
+
+      const dayKey = new Date(rep.date).toDateString();
+      const stats = dailyStats.get(dayKey) || { timeMs: 0, count: 0, responseTimesMs: [] };
+      stats.timeMs += rep.responseTime;
+      stats.count += 1;
+      stats.responseTimesMs.push(rep.responseTime);
+      dailyStats.set(dayKey, stats);
+    }
+  }
+
+  if (dailyStats.size === 0) return [];
+
+  const result: DailyTimeStats[] = [];
+  for (const [dayKey, stats] of dailyStats) {
+    result.push({
+      date: new Date(dayKey).getTime(),
+      timeMs: stats.timeMs,
+      reviewCount: stats.count,
+      responseTimesMs: stats.responseTimesMs
+    });
+  }
+
+  result.sort((a, b) => a.date - b.date);
+  return result;
+}
+
+/**
+ * Overall time statistics summary
+ */
+export interface TimeStatsSummary {
+  totalTimeMs: number;
+  totalReviews: number;
+  daysWithReviews: number;
+  totalDaysInPeriod: number;
+  averageTimePerDay: number; // Average over all days in period (ms)
+  averageTimePerReviewDay: number; // Average over days with reviews (ms)
+  averageTimePerCard: number; // Average time per card review (ms)
+  cardsPerMinute: number; // Average cards per minute
+  percentageDaysStudied: number; // Percentage of days studied (0-100)
+}
+
+/**
+ * Tukey box-plot statistics for response times in a selected period.
+ */
+export interface ResponseTimeDistribution {
+  reviewCount: number;
+  averageMs: number;
+  q1Ms: number;
+  medianMs: number;
+  q3Ms: number;
+  lowerWhiskerMs: number;
+  upperWhiskerMs: number;
+  lowOutlierCount: number;
+  highOutlierCount: number;
+  lowOutliersMs: number[];
+  highOutliersMs: number[];
+}
+
+function getInterpolatedQuantile(sortedValues: number[], percentile: number): number {
+  if (sortedValues.length === 1) return sortedValues[0];
+
+  const index = (sortedValues.length - 1) * percentile;
+  const lowerIndex = Math.floor(index);
+  const upperIndex = Math.ceil(index);
+  const interpolation = index - lowerIndex;
+
+  return sortedValues[lowerIndex] + (sortedValues[upperIndex] - sortedValues[lowerIndex]) * interpolation;
+}
+
+function sampleEvenly(values: number[], maxSamples: number): number[] {
+  if (values.length <= maxSamples) return values;
+
+  return Array.from({ length: maxSamples }, (_, index) => {
+    const sourceIndex = Math.round(index * (values.length - 1) / (maxSamples - 1));
+    return values[sourceIndex];
+  });
+}
+
+/**
+ * Calculates a Tukey box plot from every valid response time in the period.
+ */
+export function getResponseTimeDistribution(
+  dailyData: DailyTimeStats[],
+  maxOutlierSamplesPerTail: number = 100
+): ResponseTimeDistribution | undefined {
+  const responseTimes = dailyData
+    .flatMap(day => day.responseTimesMs)
+    .filter(responseTime => responseTime > 0)
+    .sort((a, b) => a - b);
+
+  if (responseTimes.length === 0) return undefined;
+
+  const averageMs = responseTimes.reduce((total, responseTime) => total + responseTime, 0) / responseTimes.length;
+  const q1Ms = getInterpolatedQuantile(responseTimes, 0.25);
+  const medianMs = getInterpolatedQuantile(responseTimes, 0.5);
+  const q3Ms = getInterpolatedQuantile(responseTimes, 0.75);
+  const interquartileRange = q3Ms - q1Ms;
+  const lowerFence = q1Ms - 1.5 * interquartileRange;
+  const upperFence = q3Ms + 1.5 * interquartileRange;
+  const lowOutliers = responseTimes.filter(responseTime => responseTime < lowerFence);
+  const highOutliers = responseTimes.filter(responseTime => responseTime > upperFence);
+  const nonOutliers = responseTimes.filter(responseTime => responseTime >= lowerFence && responseTime <= upperFence);
+
+  return {
+    reviewCount: responseTimes.length,
+    averageMs,
+    q1Ms,
+    medianMs,
+    q3Ms,
+    lowerWhiskerMs: nonOutliers[0],
+    upperWhiskerMs: nonOutliers[nonOutliers.length - 1],
+    lowOutlierCount: lowOutliers.length,
+    highOutlierCount: highOutliers.length,
+    lowOutliersMs: sampleEvenly(lowOutliers, maxOutlierSamplesPerTail),
+    highOutliersMs: sampleEvenly(highOutliers, maxOutlierSamplesPerTail)
+  };
+}
+
+/**
+ * Average response time for a study day.
+ */
+export interface RecallSpeedDataPoint {
+  date: number;
+  averageResponseTimeMs: number;
+  medianResponseTimeMs?: number;
+  reviewCount: number; // Reviews retained after percentile trimming
+  totalReviewCount: number; // Timed reviews before percentile trimming
+}
+
+export type RecallSpeedDirection = 'faster' | 'slower' | 'unchanged';
+
+/**
+ * Summary of recent recall speed, optionally compared with the preceding period.
+ */
+export interface RecallSpeedSummary {
+  averageResponseTimeMs: number;
+  studyDaysIncluded: number;
+  comparison?: {
+    averageResponseTimeMs: number;
+    differenceMs: number;
+    percentageChange: number;
+    direction: RecallSpeedDirection;
+  };
+}
+
+/**
+ * Converts daily time statistics into average response time per study day.
+ */
+export function getRecallSpeedPerDay(dailyData: DailyTimeStats[]): RecallSpeedDataPoint[] {
+  return dailyData
+    .filter(day => day.responseTimesMs.length > 0)
+    .map(day => {
+      const sortedResponseTimes = [...day.responseTimesMs].sort((a, b) => a - b);
+      const tailCount = sortedResponseTimes.length >= 3
+        ? Math.min(
+          Math.max(1, Math.floor(sortedResponseTimes.length * 0.05)),
+          Math.floor((sortedResponseTimes.length - 1) / 2)
+        )
+        : 0;
+      const retainedResponseTimes = sortedResponseTimes.slice(tailCount, sortedResponseTimes.length - tailCount);
+      const totalTimeMs = retainedResponseTimes.reduce((sum, responseTime) => sum + responseTime, 0);
+      const middleIndex = Math.floor(retainedResponseTimes.length / 2);
+      const medianResponseTimeMs = retainedResponseTimes.length % 2 === 0
+        ? (retainedResponseTimes[middleIndex - 1] + retainedResponseTimes[middleIndex]) / 2
+        : retainedResponseTimes[middleIndex];
+
+      return {
+        date: day.date,
+        averageResponseTimeMs: totalTimeMs / retainedResponseTimes.length,
+        medianResponseTimeMs,
+        reviewCount: retainedResponseTimes.length,
+        totalReviewCount: sortedResponseTimes.length
+      };
+    });
+}
+
+/**
+ * Computes a weighted moving average of response time across study days.
+ */
+export function getWeightedRecallSpeedMovingAverage(
+  data: RecallSpeedDataPoint[],
+  windowSize: number
+): RecallSpeedDataPoint[] {
+  if (!data || data.length === 0 || windowSize <= 0) return [];
+
+  const result: RecallSpeedDataPoint[] = [];
+
+  for (let index = windowSize - 1; index < data.length; index++) {
+    const window = data.slice(index - windowSize + 1, index + 1);
+    const reviewCount = window.reduce((sum, day) => sum + day.reviewCount, 0);
+    const totalTimeMs = window.reduce(
+      (sum, day) => sum + day.averageResponseTimeMs * day.reviewCount,
+      0
+    );
+
+    result.push({
+      date: data[index].date,
+      averageResponseTimeMs: totalTimeMs / reviewCount,
+      reviewCount,
+      totalReviewCount: window.reduce((sum, day) => sum + day.totalReviewCount, 0)
+    });
+  }
+
+  return result;
+}
+
+/**
+ * Compares the latest study-day window with the preceding one.
+ */
+export function calculateRecallSpeedSummary(
+  data: RecallSpeedDataPoint[],
+  windowSize: number = 7
+): RecallSpeedSummary | undefined {
+  if (!data || data.length === 0 || windowSize <= 0) return undefined;
+
+  const calculateWeightedAverage = (days: RecallSpeedDataPoint[]) => {
+    const reviewCount = days.reduce((sum, day) => sum + day.reviewCount, 0);
+    const totalTimeMs = days.reduce(
+      (sum, day) => sum + day.averageResponseTimeMs * day.reviewCount,
+      0
+    );
+    return totalTimeMs / reviewCount;
+  };
+
+  const currentWindow = data.slice(-windowSize);
+  const averageResponseTimeMs = calculateWeightedAverage(currentWindow);
+  const summary: RecallSpeedSummary = {
+    averageResponseTimeMs,
+    studyDaysIncluded: currentWindow.length
+  };
+
+  if (data.length < windowSize * 2) return summary;
+
+  const previousWindow = data.slice(-windowSize * 2, -windowSize);
+  const previousAverageResponseTimeMs = calculateWeightedAverage(previousWindow);
+  const differenceMs = averageResponseTimeMs - previousAverageResponseTimeMs;
+  const percentageChange = previousAverageResponseTimeMs > 0
+    ? (differenceMs / previousAverageResponseTimeMs) * 100
+    : 0;
+
+  summary.comparison = {
+    averageResponseTimeMs: previousAverageResponseTimeMs,
+    differenceMs,
+    percentageChange,
+    direction: differenceMs < 0 ? 'faster' : differenceMs > 0 ? 'slower' : 'unchanged'
+  };
+
+  return summary;
+}
+
+/**
+ * Calculates overall time statistics from daily data
+ * @param dailyData - Array of daily time statistics
+ * @param startDate - Start of the period (for calculating total days)
+ * @param endDate - End of the period
+ * @returns Summary of time statistics
+ */
+export function calculateTimeStatsSummary(
+  dailyData: DailyTimeStats[],
+  startDate?: number,
+  endDate?: number
+): TimeStatsSummary {
+  if (dailyData.length === 0) {
+    return {
+      totalTimeMs: 0,
+      totalReviews: 0,
+      daysWithReviews: 0,
+      totalDaysInPeriod: 0,
+      averageTimePerDay: 0,
+      averageTimePerReviewDay: 0,
+      averageTimePerCard: 0,
+      cardsPerMinute: 0,
+      percentageDaysStudied: 0
+    };
+  }
+
+  const totalTimeMs = dailyData.reduce((sum, day) => sum + day.timeMs, 0);
+  const totalReviews = dailyData.reduce((sum, day) => sum + day.reviewCount, 0);
+  const daysWithReviews = dailyData.filter(day => day.reviewCount > 0).length;
+
+  // Calculate the full calendar span, including days without reviews. For open
+  // date ranges, use the first and last days represented by the available data.
+  const dayMs = 24 * 60 * 60 * 1000;
+  const firstReviewDay = Math.min(...dailyData.map(day => day.date));
+  const lastReviewDayEnd = new Date(Math.max(...dailyData.map(day => day.date)));
+  lastReviewDayEnd.setDate(lastReviewDayEnd.getDate() + 1);
+  const periodStart = startDate ?? firstReviewDay;
+  const periodEnd = endDate ?? lastReviewDayEnd.getTime();
+  const startDay = new Date(periodStart);
+  const endDay = new Date(periodEnd);
+  const startCalendarDay = Date.UTC(startDay.getFullYear(), startDay.getMonth(), startDay.getDate());
+  const endCalendarDay = Date.UTC(endDay.getFullYear(), endDay.getMonth(), endDay.getDate());
+  const totalDaysInPeriod = Math.max(
+    Math.round((endCalendarDay - startCalendarDay) / dayMs),
+    dailyData.length
+  );
+
+  const averageTimePerDay = totalDaysInPeriod > 0 ? totalTimeMs / totalDaysInPeriod : 0;
+  const averageTimePerReviewDay = daysWithReviews > 0 ? totalTimeMs / daysWithReviews : 0;
+  const averageTimePerCard = totalReviews > 0 ? totalTimeMs / totalReviews : 0;
+  
+  // Cards per minute: (totalReviews / (totalTimeMs / 60000))
+  const cardsPerMinute = totalTimeMs > 0 ? (totalReviews / (totalTimeMs / 60000)) : 0;
+  
+  const percentageDaysStudied = totalDaysInPeriod > 0 ? (daysWithReviews / totalDaysInPeriod) * 100 : 0;
+
+  return {
+    totalTimeMs,
+    totalReviews,
+    daysWithReviews,
+    totalDaysInPeriod,
+    averageTimePerDay,
+    averageTimePerReviewDay,
+    averageTimePerCard,
+    cardsPerMinute,
+    percentageDaysStudied
+  };
+}
+
+/**
+ * Format milliseconds to human-readable time string
+ * @param ms - Time in milliseconds
+ * @param format - Format type ('short' for "1h 23m", 'long' for "1 hour 23 minutes", 'hours' for "1.38h")
+ * @returns Formatted time string
+ */
+export function formatTime(ms: number, format: 'short' | 'long' | 'hours' | 'seconds' = 'short'): string {
+  if (ms === 0) {
+    if (format === 'hours') return '0.00h';
+    if (format === 'seconds') return '0.00s';
+    return '0s';
+  }
+
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (format === 'hours') {
+    const hoursDecimal = ms / (1000 * 60 * 60);
+    return `${hoursDecimal.toFixed(2)}h`;
+  }
+
+  if (format === 'seconds') {
+    const secondsDecimal = ms / 1000;
+    return `${secondsDecimal.toFixed(2)}s`;
+  }
+
+  const parts: string[] = [];
+  
+  if (hours > 0) {
+    parts.push(format === 'long' ? `${hours} hour${hours > 1 ? 's' : ''}` : `${hours}h`);
+  }
+  if (minutes > 0) {
+    parts.push(format === 'long' ? `${minutes} minute${minutes > 1 ? 's' : ''}` : `${minutes}m`);
+  }
+  if (seconds > 0 && hours === 0) { // Only show seconds if less than an hour
+    parts.push(format === 'long' ? `${seconds} second${seconds > 1 ? 's' : ''}` : `${seconds}s`);
+  }
+
+  return parts.join(' ') || '0s';
+}
