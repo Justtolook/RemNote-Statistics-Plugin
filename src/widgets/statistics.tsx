@@ -34,7 +34,14 @@ import {
   calculateTimeStatsSummary,
   formatTime,
   DailyTimeStats,
-  TimeStatsSummary
+  TimeStatsSummary,
+  getRecallSpeedPerDay,
+  getWeightedRecallSpeedMovingAverage,
+  calculateRecallSpeedSummary,
+  RecallSpeedDataPoint,
+  RecallSpeedSummary,
+  getResponseTimeDistribution,
+  ResponseTimeDistribution
 } from '../lib/dataProcessing';
 
 type RangeMode = 'Today' | 'Yesterday' | 'Week' | 'This Week' | 'Last Week' | 'Month' | 'This Month' | 'Last Month' | 'Year' | 'This Year' | 'Last Year' | 'All';
@@ -342,6 +349,22 @@ export const Statistics = () => {
     const endTs = dateEnd ? new Date(dateEnd).getTime() + (24 * 60 * 60 * 1000) : undefined;
     return calculateTimeStatsSummary(timeStatsData, startTs, endTs);
   }, [timeStatsData, dateStart, dateEnd]);
+
+  const recallSpeedData = React.useMemo(() => {
+    return getRecallSpeedPerDay(timeStatsData);
+  }, [timeStatsData]);
+
+  const recallSpeedMovingAverage = React.useMemo(() => {
+    return getWeightedRecallSpeedMovingAverage(recallSpeedData, 7);
+  }, [recallSpeedData]);
+
+  const recallSpeedSummary = React.useMemo(() => {
+    return calculateRecallSpeedSummary(recallSpeedData, 7);
+  }, [recallSpeedData]);
+
+  const responseTimeDistribution = React.useMemo(() => {
+    return getResponseTimeDistribution(timeStatsData);
+  }, [timeStatsData]);
 
   // -- Styles --
   const containerStyle = getContainerStyle();
@@ -910,6 +933,22 @@ export const Statistics = () => {
                 timeStatsData,
                 timeStatsSummary,
                 'Time spent reviewing'
+              )}
+            </div>
+
+            <div className="chart-container">
+              {chart_recall_speed(
+                recallSpeedData,
+                recallSpeedMovingAverage,
+                recallSpeedSummary,
+                'Recall speed over time'
+              )}
+            </div>
+
+            <div className="chart-container">
+              {chart_response_time_distribution(
+                responseTimeDistribution,
+                'Response time distribution'
               )}
             </div>
             </div>
@@ -1752,6 +1791,263 @@ function chart_time_spent(
           type: 'area',
           data: cumulativeData 
         }
+      ]}
+    />
+  </div>;
+}
+
+function chart_recall_speed(
+  dailyData: RecallSpeedDataPoint[],
+  movingAverage: RecallSpeedDataPoint[],
+  summary: RecallSpeedSummary | undefined,
+  title: string
+) {
+  if (!dailyData || dailyData.length === 0) return <div className="p-8 text-center opacity-60">
+    <div className="text-sm">No recall-speed data available</div>
+    <div className="text-xs mt-1">Response-time trends will appear as you review flashcards</div>
+  </div>;
+
+  const chartData = dailyData.map(day => ({
+    x: day.date,
+    y: day.averageResponseTimeMs / 1000
+  }));
+  const medianChartData = dailyData.map(day => ({
+    x: day.date,
+    y: (day.medianResponseTimeMs ?? 0) / 1000
+  }));
+  const movingAverageData = movingAverage.map(day => ({
+    x: day.date,
+    y: day.averageResponseTimeMs / 1000
+  }));
+  const remainingDaysForComparison = Math.max(0, 14 - dailyData.length);
+  const comparison = summary?.comparison;
+  const comparisonColor = comparison?.direction === 'faster'
+    ? '#10b981'
+    : comparison?.direction === 'slower'
+      ? '#ef4444'
+      : 'var(--rn-clr-content-primary)';
+  const comparisonText = comparison
+    ? comparison.direction === 'unchanged'
+      ? 'No change from the previous 7 study days'
+      : `${formatTime(Math.abs(comparison.differenceMs), 'seconds')} ${comparison.direction} (${Math.abs(comparison.percentageChange).toFixed(1)}%)`
+    : remainingDaysForComparison > 0
+      ? `Compare after ${remainingDaysForComparison} more study day${remainingDaysForComparison === 1 ? '' : 's'}`
+      : 'Comparison unavailable';
+
+  const options = {
+    ...getCommonChartOptions(title, 'datetime'),
+    dataLabels: { enabled: false },
+    stroke: {
+      curve: 'smooth' as const,
+      width: [2, 2, 3],
+      dashArray: [0, 3, 5]
+    },
+    colors: [chartColor, '#8b5cf6', '#f59e0b'],
+    xaxis: {
+      ...getCommonChartOptions(title, 'datetime').xaxis,
+      type: 'datetime' as const,
+      labels: {
+        format: 'MMM dd',
+        style: { colors: 'var(--rn-clr-content-primary)' }
+      }
+    },
+    yaxis: {
+      min: 0,
+      labels: {
+        style: { colors: 'var(--rn-clr-content-primary)' },
+        formatter: function(val: number) {
+          return `${val.toFixed(1)}s`;
+        }
+      },
+      title: {
+        text: 'Response time (seconds/card)',
+        style: { color: 'var(--rn-clr-content-primary)' }
+      }
+    },
+    tooltip: {
+      theme: 'light' as const,
+      x: { format: 'dd MMM yyyy' },
+      y: {
+        formatter: function(val: number, opts: any) {
+          if (opts.seriesIndex === 0) {
+            const point = dailyData[opts.dataPointIndex];
+            return `${val.toFixed(2)} seconds/card (${point?.reviewCount || 0} of ${point?.totalReviewCount || 0} timed reviews retained)`;
+          }
+          if (opts.seriesIndex === 1) {
+            return `${val.toFixed(2)} seconds/card (daily median)`;
+          }
+          return `${val.toFixed(2)} seconds/card (7-study-day average)`;
+        }
+      }
+    },
+    markers: {
+      size: [3, 3, 0],
+      hover: { size: 5 }
+    },
+    legend: {
+      show: true,
+      position: 'top' as const,
+      horizontalAlign: 'right' as const,
+      labels: { colors: 'var(--rn-clr-content-primary)' },
+      onItemClick: { toggleDataSeries: true },
+      onItemHover: { highlightDataSeries: true }
+    }
+  };
+
+  return <div>
+    <div className="stat-card mb-4 md:mb-6 p-3 md:p-4 border rounded-lg" style={{
+      borderColor: 'var(--rn-clr-border-primary)',
+      backgroundColor: 'var(--rn-clr-background-primary)'
+    }}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
+        <div className="text-center">
+          <div className="text-[10px] md:text-xs uppercase tracking-wide opacity-60 mb-1 md:mb-2">Response Time</div>
+          <div className="text-lg md:text-xl font-bold" style={{ color: chartColor }}>
+            {formatTime(summary?.averageResponseTimeMs || 0, 'seconds')}/card
+          </div>
+          <div className="text-[10px] md:text-xs opacity-60 mt-1">
+            Latest {summary?.studyDaysIncluded || 0} study day{summary?.studyDaysIncluded === 1 ? '' : 's'}
+          </div>
+        </div>
+        <div className="text-center">
+          <div className="text-[10px] md:text-xs uppercase tracking-wide opacity-60 mb-1 md:mb-2">Trend</div>
+          <div className="text-sm md:text-base font-bold" style={{ color: comparisonColor }}>
+            {comparisonText}
+          </div>
+          {comparison && (
+            <div className="text-[10px] md:text-xs opacity-60 mt-1">
+              Previous: {formatTime(comparison.averageResponseTimeMs, 'seconds')}/card
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="mt-2 md:mt-3 text-[10px] md:text-xs text-center opacity-60">
+        Daily averages and medians use the 5th–95th percentile of response times.
+      </div>
+    </div>
+
+    <Chart
+      options={options}
+      type="line"
+      width="100%"
+      height="300"
+      series={[
+        { name: 'Daily Response Time', data: chartData },
+        { name: 'Daily Median Response Time', data: medianChartData },
+        { name: '7 Study Day Average', data: movingAverageData }
+      ]}
+    />
+  </div>;
+}
+
+function chart_response_time_distribution(
+  distribution: ResponseTimeDistribution | undefined,
+  title: string
+) {
+  if (!distribution) return <div className="p-8 text-center opacity-60">
+    <div className="text-sm">No response-time data available</div>
+    <div className="text-xs mt-1">A distribution will appear as you review flashcards</div>
+  </div>;
+
+  const toSeconds = (milliseconds: number) => milliseconds / 1000;
+  const boxPlotData = [{
+    x: 'Selected period',
+    y: [
+      toSeconds(distribution.lowerWhiskerMs),
+      toSeconds(distribution.q1Ms),
+      toSeconds(distribution.medianMs),
+      toSeconds(distribution.q3Ms),
+      toSeconds(distribution.upperWhiskerMs)
+    ]
+  }];
+  const formatStatistic = (milliseconds: number) => `${formatTime(milliseconds, 'seconds')}/card`;
+  const distributionSummary = `${distribution.reviewCount.toLocaleString()} timed reviews · average ${formatStatistic(distribution.averageMs)} · ${distribution.lowOutlierCount} low outlier${distribution.lowOutlierCount === 1 ? '' : 's'} · ${distribution.highOutlierCount} high outlier${distribution.highOutlierCount === 1 ? '' : 's'}`;
+  const options = {
+    ...getCommonChartOptions(title, 'category'),
+    subtitle: {
+      text: distributionSummary,
+      align: 'left' as const,
+      offsetY: 24,
+      style: {
+        color: 'var(--rn-clr-content-secondary)',
+        fontSize: '11px',
+        fontWeight: 400
+      }
+    },
+    plotOptions: {
+      bar: {
+        horizontal: true
+      },
+      boxPlot: {
+        colors: {
+          upper: '#8b5cf6',
+          lower: chartColor
+        }
+      }
+    },
+    xaxis: {
+      ...getCommonChartOptions(title, 'category').xaxis,
+      labels: {
+        formatter: function(value: string) {
+          const seconds = Number(value);
+          return Number.isFinite(seconds) ? `${seconds.toFixed(1)}s` : value;
+        },
+        style: { colors: 'var(--rn-clr-content-primary)' }
+      },
+      title: {
+        text: 'Response time (seconds/card)',
+        style: { color: 'var(--rn-clr-content-primary)' }
+      }
+    },
+    annotations: {
+      xaxis: [{
+        x: toSeconds(distribution.averageMs),
+        borderColor: '#f59e0b',
+        strokeDashArray: 4,
+        label: {
+          text: `Average: ${formatStatistic(distribution.averageMs)}`,
+          style: {
+            background: '#f59e0b',
+            color: '#1f2937',
+            fontSize: '10px'
+          }
+        }
+      }]
+    },
+    yaxis: {
+      labels: {
+        style: { colors: 'var(--rn-clr-content-primary)' }
+      }
+    },
+    tooltip: {
+      theme: 'light' as const,
+      custom: function() {
+        return `<div style="padding: 8px 12px; line-height: 1.5">
+          <strong>Selected period</strong><br />
+          ${distribution.reviewCount} timed reviews<br />
+          Average: ${formatStatistic(distribution.averageMs)}<br />
+          Lower whisker: ${formatStatistic(distribution.lowerWhiskerMs)}<br />
+          Q1: ${formatStatistic(distribution.q1Ms)}<br />
+          Median: ${formatStatistic(distribution.medianMs)}<br />
+          Q3: ${formatStatistic(distribution.q3Ms)}<br />
+          Upper whisker: ${formatStatistic(distribution.upperWhiskerMs)}<br />
+          Outliers: ${distribution.lowOutlierCount} low, ${distribution.highOutlierCount} high
+        </div>`;
+      }
+    },
+    legend: {
+      show: false
+    }
+  };
+
+  return <div>
+    <Chart
+      options={options}
+      type="boxPlot"
+      width="100%"
+      height="280"
+      series={[
+        { name: 'Response Time Distribution', data: boxPlotData }
       ]}
     />
   </div>;

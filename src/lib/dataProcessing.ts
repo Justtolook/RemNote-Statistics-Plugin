@@ -528,6 +528,7 @@ export interface DailyTimeStats {
   date: number; // Unix timestamp
   timeMs: number; // Total time in milliseconds
   reviewCount: number; // Number of reviews
+  responseTimesMs: number[]; // Individual valid response times
 }
 
 /**
@@ -544,7 +545,7 @@ export function getTimeSpentPerDay(
 ): DailyTimeStats[] {
   if (!allCards || allCards.length === 0) return [];
 
-  const dailyStats = new Map<string, { timeMs: number; count: number }>();
+  const dailyStats = new Map<string, { timeMs: number; count: number; responseTimesMs: number[] }>();
 
   for (const card of allCards) {
     const history = card.repetitionHistory;
@@ -556,9 +557,10 @@ export function getTimeSpentPerDay(
       if (!rep.responseTime || rep.responseTime <= 0) continue;
 
       const dayKey = new Date(rep.date).toDateString();
-      const stats = dailyStats.get(dayKey) || { timeMs: 0, count: 0 };
+      const stats = dailyStats.get(dayKey) || { timeMs: 0, count: 0, responseTimesMs: [] };
       stats.timeMs += rep.responseTime;
       stats.count += 1;
+      stats.responseTimesMs.push(rep.responseTime);
       dailyStats.set(dayKey, stats);
     }
   }
@@ -570,7 +572,8 @@ export function getTimeSpentPerDay(
     result.push({
       date: new Date(dayKey).getTime(),
       timeMs: stats.timeMs,
-      reviewCount: stats.count
+      reviewCount: stats.count,
+      responseTimesMs: stats.responseTimesMs
     });
   }
 
@@ -591,6 +594,215 @@ export interface TimeStatsSummary {
   averageTimePerCard: number; // Average time per card review (ms)
   cardsPerMinute: number; // Average cards per minute
   percentageDaysStudied: number; // Percentage of days studied (0-100)
+}
+
+/**
+ * Tukey box-plot statistics for response times in a selected period.
+ */
+export interface ResponseTimeDistribution {
+  reviewCount: number;
+  averageMs: number;
+  q1Ms: number;
+  medianMs: number;
+  q3Ms: number;
+  lowerWhiskerMs: number;
+  upperWhiskerMs: number;
+  lowOutlierCount: number;
+  highOutlierCount: number;
+  lowOutliersMs: number[];
+  highOutliersMs: number[];
+}
+
+function getInterpolatedQuantile(sortedValues: number[], percentile: number): number {
+  if (sortedValues.length === 1) return sortedValues[0];
+
+  const index = (sortedValues.length - 1) * percentile;
+  const lowerIndex = Math.floor(index);
+  const upperIndex = Math.ceil(index);
+  const interpolation = index - lowerIndex;
+
+  return sortedValues[lowerIndex] + (sortedValues[upperIndex] - sortedValues[lowerIndex]) * interpolation;
+}
+
+function sampleEvenly(values: number[], maxSamples: number): number[] {
+  if (values.length <= maxSamples) return values;
+
+  return Array.from({ length: maxSamples }, (_, index) => {
+    const sourceIndex = Math.round(index * (values.length - 1) / (maxSamples - 1));
+    return values[sourceIndex];
+  });
+}
+
+/**
+ * Calculates a Tukey box plot from every valid response time in the period.
+ */
+export function getResponseTimeDistribution(
+  dailyData: DailyTimeStats[],
+  maxOutlierSamplesPerTail: number = 100
+): ResponseTimeDistribution | undefined {
+  const responseTimes = dailyData
+    .flatMap(day => day.responseTimesMs)
+    .filter(responseTime => responseTime > 0)
+    .sort((a, b) => a - b);
+
+  if (responseTimes.length === 0) return undefined;
+
+  const averageMs = responseTimes.reduce((total, responseTime) => total + responseTime, 0) / responseTimes.length;
+  const q1Ms = getInterpolatedQuantile(responseTimes, 0.25);
+  const medianMs = getInterpolatedQuantile(responseTimes, 0.5);
+  const q3Ms = getInterpolatedQuantile(responseTimes, 0.75);
+  const interquartileRange = q3Ms - q1Ms;
+  const lowerFence = q1Ms - 1.5 * interquartileRange;
+  const upperFence = q3Ms + 1.5 * interquartileRange;
+  const lowOutliers = responseTimes.filter(responseTime => responseTime < lowerFence);
+  const highOutliers = responseTimes.filter(responseTime => responseTime > upperFence);
+  const nonOutliers = responseTimes.filter(responseTime => responseTime >= lowerFence && responseTime <= upperFence);
+
+  return {
+    reviewCount: responseTimes.length,
+    averageMs,
+    q1Ms,
+    medianMs,
+    q3Ms,
+    lowerWhiskerMs: nonOutliers[0],
+    upperWhiskerMs: nonOutliers[nonOutliers.length - 1],
+    lowOutlierCount: lowOutliers.length,
+    highOutlierCount: highOutliers.length,
+    lowOutliersMs: sampleEvenly(lowOutliers, maxOutlierSamplesPerTail),
+    highOutliersMs: sampleEvenly(highOutliers, maxOutlierSamplesPerTail)
+  };
+}
+
+/**
+ * Average response time for a study day.
+ */
+export interface RecallSpeedDataPoint {
+  date: number;
+  averageResponseTimeMs: number;
+  medianResponseTimeMs?: number;
+  reviewCount: number; // Reviews retained after percentile trimming
+  totalReviewCount: number; // Timed reviews before percentile trimming
+}
+
+export type RecallSpeedDirection = 'faster' | 'slower' | 'unchanged';
+
+/**
+ * Summary of recent recall speed, optionally compared with the preceding period.
+ */
+export interface RecallSpeedSummary {
+  averageResponseTimeMs: number;
+  studyDaysIncluded: number;
+  comparison?: {
+    averageResponseTimeMs: number;
+    differenceMs: number;
+    percentageChange: number;
+    direction: RecallSpeedDirection;
+  };
+}
+
+/**
+ * Converts daily time statistics into average response time per study day.
+ */
+export function getRecallSpeedPerDay(dailyData: DailyTimeStats[]): RecallSpeedDataPoint[] {
+  return dailyData
+    .filter(day => day.responseTimesMs.length > 0)
+    .map(day => {
+      const sortedResponseTimes = [...day.responseTimesMs].sort((a, b) => a - b);
+      const tailCount = sortedResponseTimes.length >= 3
+        ? Math.min(
+          Math.max(1, Math.floor(sortedResponseTimes.length * 0.05)),
+          Math.floor((sortedResponseTimes.length - 1) / 2)
+        )
+        : 0;
+      const retainedResponseTimes = sortedResponseTimes.slice(tailCount, sortedResponseTimes.length - tailCount);
+      const totalTimeMs = retainedResponseTimes.reduce((sum, responseTime) => sum + responseTime, 0);
+      const middleIndex = Math.floor(retainedResponseTimes.length / 2);
+      const medianResponseTimeMs = retainedResponseTimes.length % 2 === 0
+        ? (retainedResponseTimes[middleIndex - 1] + retainedResponseTimes[middleIndex]) / 2
+        : retainedResponseTimes[middleIndex];
+
+      return {
+        date: day.date,
+        averageResponseTimeMs: totalTimeMs / retainedResponseTimes.length,
+        medianResponseTimeMs,
+        reviewCount: retainedResponseTimes.length,
+        totalReviewCount: sortedResponseTimes.length
+      };
+    });
+}
+
+/**
+ * Computes a weighted moving average of response time across study days.
+ */
+export function getWeightedRecallSpeedMovingAverage(
+  data: RecallSpeedDataPoint[],
+  windowSize: number
+): RecallSpeedDataPoint[] {
+  if (!data || data.length === 0 || windowSize <= 0) return [];
+
+  const result: RecallSpeedDataPoint[] = [];
+
+  for (let index = windowSize - 1; index < data.length; index++) {
+    const window = data.slice(index - windowSize + 1, index + 1);
+    const reviewCount = window.reduce((sum, day) => sum + day.reviewCount, 0);
+    const totalTimeMs = window.reduce(
+      (sum, day) => sum + day.averageResponseTimeMs * day.reviewCount,
+      0
+    );
+
+    result.push({
+      date: data[index].date,
+      averageResponseTimeMs: totalTimeMs / reviewCount,
+      reviewCount,
+      totalReviewCount: window.reduce((sum, day) => sum + day.totalReviewCount, 0)
+    });
+  }
+
+  return result;
+}
+
+/**
+ * Compares the latest study-day window with the preceding one.
+ */
+export function calculateRecallSpeedSummary(
+  data: RecallSpeedDataPoint[],
+  windowSize: number = 7
+): RecallSpeedSummary | undefined {
+  if (!data || data.length === 0 || windowSize <= 0) return undefined;
+
+  const calculateWeightedAverage = (days: RecallSpeedDataPoint[]) => {
+    const reviewCount = days.reduce((sum, day) => sum + day.reviewCount, 0);
+    const totalTimeMs = days.reduce(
+      (sum, day) => sum + day.averageResponseTimeMs * day.reviewCount,
+      0
+    );
+    return totalTimeMs / reviewCount;
+  };
+
+  const currentWindow = data.slice(-windowSize);
+  const averageResponseTimeMs = calculateWeightedAverage(currentWindow);
+  const summary: RecallSpeedSummary = {
+    averageResponseTimeMs,
+    studyDaysIncluded: currentWindow.length
+  };
+
+  if (data.length < windowSize * 2) return summary;
+
+  const previousWindow = data.slice(-windowSize * 2, -windowSize);
+  const previousAverageResponseTimeMs = calculateWeightedAverage(previousWindow);
+  const differenceMs = averageResponseTimeMs - previousAverageResponseTimeMs;
+  const percentageChange = previousAverageResponseTimeMs > 0
+    ? (differenceMs / previousAverageResponseTimeMs) * 100
+    : 0;
+
+  summary.comparison = {
+    averageResponseTimeMs: previousAverageResponseTimeMs,
+    differenceMs,
+    percentageChange,
+    direction: differenceMs < 0 ? 'faster' : differenceMs > 0 ? 'slower' : 'unchanged'
+  };
+
+  return summary;
 }
 
 /**

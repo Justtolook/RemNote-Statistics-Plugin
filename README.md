@@ -14,6 +14,8 @@ The RemNote Statistics Plugin transforms your flashcard review data into actiona
 - **Productivity Metrics**: View average time per day, per study day, and per card
 - **Study Efficiency**: Cards per minute rate and study day percentage
 - **Time Spent Card**: New metric card in Review Statistics section showing total time and daily averages
+- **Recall Speed Trend**: Track daily average and median response time from the middle 90% of reviews, a weighted 7-study-day average, and whether recall is getting faster or slower
+- **Response Time Distribution**: Inspect the selected period's response-time average, quartiles, Tukey whiskers, and unusually fast or slow review counts
 
 ### 📈 Comprehensive Analytics Dashboard
 - **Retention Rate Tracking**: Monitor your recall success rate over time with daily, weekly (7-day moving average), monthly (30-day moving average), and cumulative average trend lines
@@ -94,6 +96,8 @@ The dashboard is organized into four main sections:
      - Cumulative Reviews Over Time
      - Retention Rate Over Time (with smoothing options)
      - Time Spent Reviewing (daily time in minutes with summary statistics)
+     - Recall Speed Over Time (daily 5th–95th percentile average and median response time, plus a weighted 7-study-day trend)
+     - Response Time Distribution (selected-period box plot with outlier counts)
 
 4. **Outlook Section**
    - Select forecast period (Week, Month, Year)
@@ -139,6 +143,8 @@ The dashboard is organized into four main sections:
   - **Time Spent Reviewing Chart**: Anki-style bar chart displaying daily time spent in minutes
   - **Summary Statistics Panel**: View total time, average per day, average per study day, and average per card
   - **Productivity Metrics**: Cards per minute rate and percentage of days studied
+  - **Recall Speed Trend**: Daily average and median response time using the 5th–95th percentile, with a weighted 7-study-day average and comparison to the preceding 7 study days
+  - **Response Time Distribution**: Horizontal box plot showing selected-period quartiles, Tukey whiskers, and outlier counts
   - **Smart Time Formatting**: Displays time in hours, minutes, or seconds depending on magnitude
   - Uses `responseTime` data from RemNote's repetition history
   - Gracefully handles missing time data with appropriate empty state messages
