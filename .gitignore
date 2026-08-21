@@ -4,3 +4,9 @@ dist
 dist-ssr
 *.local
 *.zip
+
+_bmad/*
+.agents/*
+.github/*
+_bmad-output/*
+AGENTS.md
