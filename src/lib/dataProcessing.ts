@@ -1,6 +1,16 @@
 import { Card } from '@remnote/plugin-sdk';
+import { AnalysisRange, addCalendarDays, dateOnlyToTimestamp } from './dateRange';
 
 const LIMIT = 1483225200000; // 1.1.2017 (unix timestamp)
+
+export function getAnalysisTimestamps(range?: AnalysisRange): { start: number; end: number } {
+  if (!range) return { start: 0, end: Infinity };
+  return {
+    start: dateOnlyToTimestamp(range.start),
+    // Existing processors treat the end limit as inclusive.
+    end: dateOnlyToTimestamp(addCalendarDays(range.end, 1)) - 1,
+  };
+}
 
 /**
  * Gets future due cards grouped by day

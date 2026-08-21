@@ -3,6 +3,21 @@ import Chart from 'react-apexcharts';
 import React from 'react';
 import { getComprehensiveContextRems } from '../lib/utils';
 import {
+  AnalysisRange,
+  filterCardsByRange,
+  getAvailableDateRange,
+  normalizeAnalysisRange,
+} from '../lib/dateRange';
+import {
+  DashboardSkeleton,
+  ChartCard,
+  DateRangeTimeline,
+  EmptyState,
+  ErrorState,
+  MetricCard,
+  SectionHeader,
+} from './statisticsComponents';
+import {
   setChartColor,
   chartColor,
   getCommonChartOptions,
@@ -15,6 +30,7 @@ import {
 } from '../lib/chartHelpers';
 import {
   getFutureDueCards,
+  getAnalysisTimestamps,
   getNumberRepetitionsGroupedByScore,
   getNumberCardsGroupedByRepetitions,
   getRepetitionsPerDayObject,
@@ -72,6 +88,11 @@ export const Statistics = () => {
   const [rangeMode, setRangeMode] = React.useState<RangeMode>(initial.mode);
   const [dateStart, setDateStart] = React.useState<string>(initial.start);
   const [dateEnd, setDateEnd] = React.useState<string>(initial.end);
+  const [analysisDateStart, setAnalysisDateStart] = React.useState<string>(initial.start);
+  const [analysisDateEnd, setAnalysisDateEnd] = React.useState<string>(initial.end);
+  const [isRangeRefreshing, setIsRangeRefreshing] = React.useState(false);
+  const [rangeAnnouncement, setRangeAnnouncement] = React.useState('');
+  const rangeRefreshTimer = React.useRef<ReturnType<typeof setTimeout>>();
   const [dueOutlook, setDueOutlook] = React.useState<number>(30);
   const [hardestCardsLimit, setHardestCardsLimit] = React.useState<number>(10);
   
@@ -81,6 +102,8 @@ export const Statistics = () => {
   const [logoClickCount, setLogoClickCount] = React.useState(0);
   const [showConfetti, setShowConfetti] = React.useState(false);
   const [showEasterBunny, setShowEasterBunny] = React.useState(false);
+  const [scopeError, setScopeError] = React.useState<string>();
+  const [scopeRetry, setScopeRetry] = React.useState(0);
 
   // -- Settings --
   const chartColorSettings = useTrackerPlugin(() => plugin.settings.getSetting('statistics-chart-color'));
@@ -172,7 +195,8 @@ export const Statistics = () => {
       return undefined;
     }
 
-    let allRems: PluginRem[] = [];
+    try {
+      let allRems: PluginRem[] = [];
 
     if (scopeMode === 'descendants') {
         console.log(`Stats Plugin: Fetching simple descendants for ${contextRem._id}...`);
@@ -202,13 +226,46 @@ export const Statistics = () => {
         }));
     }
 
-    console.log(`Stats Plugin: Found ${resultCards.length} total cards in context (Mode: ${scopeMode}).`);
-    return resultCards;
-  }, [contextRem, scopeMode]);
+      console.log(`Stats Plugin: Found ${resultCards.length} total cards in context (Mode: ${scopeMode}).`);
+      setScopeError(undefined);
+      return resultCards;
+    } catch (error) {
+      console.error('Stats Plugin: Error loading context data:', error);
+      setScopeError('The selected Rem scope could not be loaded.');
+      return [];
+    }
+  }, [contextRem, scopeMode, scopeRetry]);
+
+  React.useEffect(() => {
+    setScopeError(undefined);
+  }, [contextMode, contextRemId, scopeMode]);
+
+  const activeCardsSource = contextMode === 'Global' ? allGlobalCards : allCardsInContext;
+  const availableDateRange = React.useMemo(() => {
+    return getAvailableDateRange((activeCardsSource || []) as Array<{ repetitionHistory?: Array<{ date: number }> | null }>);
+  }, [activeCardsSource]);
+
+  const commitDateRange = React.useCallback((start: string, end: string, mode: RangeMode = 'All') => {
+    setDateStart(start);
+    setDateEnd(end);
+    setAnalysisDateStart(start);
+    setAnalysisDateEnd(end);
+    setRangeMode(mode);
+    setRangeAnnouncement(start && end ? `Selected dates ${start} through ${end}.` : 'Showing all available dates.');
+    setIsRangeRefreshing(true);
+
+    if (rangeRefreshTimer.current) clearTimeout(rangeRefreshTimer.current);
+    rangeRefreshTimer.current = setTimeout(() => setIsRangeRefreshing(false), 200);
+  }, []);
+
+  React.useEffect(() => {
+    return () => {
+      if (rangeRefreshTimer.current) clearTimeout(rangeRefreshTimer.current);
+    };
+  }, []);
 
   // -- Range Change Handler --
   const handleRangeChange = (mode: RangeMode) => {
-    setRangeMode(mode);
     const t = new Date();
     const getToday = () => new Date(t);
 
@@ -254,43 +311,45 @@ export const Statistics = () => {
         end = new Date(t.getFullYear() - 1, 11, 31);
         break;
       case 'All':
-        setDateStart('');
-        setDateEnd('');
+        commitDateRange('', '', mode);
         return;
     }
 
-    setDateStart(start.toISOString().split('T')[0]);
-    setDateEnd(end.toISOString().split('T')[0]);
+    commitDateRange(start.toISOString().split('T')[0], end.toISOString().split('T')[0], mode);
   };
   
-  const isLoadingContext = contextMode === 'Current' && allCardsInContext === undefined;
-  const activeCardsSource = contextMode === 'Global' ? allGlobalCards : allCardsInContext;
+  const isLoadingContext = activeCardsSource === undefined && !(contextMode === 'Current' && !contextRemId);
+  const committedAnalysisRange = React.useMemo<AnalysisRange | undefined>(() => {
+    if (!analysisDateStart || !analysisDateEnd) return undefined;
+    return normalizeAnalysisRange(
+      { start: analysisDateStart, end: analysisDateEnd },
+      availableDateRange
+    );
+  }, [analysisDateStart, analysisDateEnd, availableDateRange]);
+
+  const selectedAnalysisRange = React.useMemo<AnalysisRange | undefined>(() => {
+    if (!dateStart || !dateEnd) return committedAnalysisRange || availableDateRange;
+    const normalized = normalizeAnalysisRange({ start: dateStart, end: dateEnd }, availableDateRange);
+    if (normalized && normalized.start === dateStart && normalized.end === dateEnd) return normalized;
+    return committedAnalysisRange || availableDateRange;
+  }, [availableDateRange, committedAnalysisRange, dateStart, dateEnd]);
 
   // -- Filtered Data for History Charts --
   const filteredCards = React.useMemo(() => {
     if (!activeCardsSource) return [];
-    if (!dateStart && !dateEnd) return activeCardsSource;
+    return filterCardsByRange(activeCardsSource as Array<Card & { repetitionHistory?: Array<{ date: number }> | null }>, committedAnalysisRange) as Card[];
+  }, [activeCardsSource, committedAnalysisRange]);
 
-    const startUnix = dateStart ? new Date(dateStart).getTime() : 0;
-    const endUnix = dateEnd ? new Date(dateEnd).getTime() + (24 * 60 * 60 * 1000) : Infinity;
-
-    return activeCardsSource.map(card => {
-       const filteredHistory = (card.repetitionHistory || []).filter(rep => {
-          return rep.date >= startUnix && rep.date < endUnix;
-       });
-       const copy = Object.assign(Object.create(Object.getPrototypeOf(card)), card);
-       copy.repetitionHistory = filteredHistory;
-       return copy;
-    });
-  }, [activeCardsSource, dateStart, dateEnd]);
+  const selectedReviewCount = React.useMemo(() => {
+    return filteredCards.reduce((total, card) => total + (card.repetitionHistory?.length || 0), 0);
+  }, [filteredCards]);
 
   // -- Filtered Data for Heatmap --
   const heatmapData = React.useMemo(() => {
     if (!activeCardsSource) return [];
-    const startTs = dateStart ? new Date(dateStart).getTime() : 0;
-    const endTs = dateEnd ? new Date(dateEnd).getTime() + (24 * 60 * 60 * 1000) : Infinity;
+    const { start: startTs, end: endTs } = getAnalysisTimestamps(committedAnalysisRange);
     return getRepetitionsPerDayOptimized(activeCardsSource, startTs, endTs);
-  }, [activeCardsSource, dateStart, dateEnd]);
+  }, [activeCardsSource, committedAnalysisRange]);
 
   // -- Prepared Data --
   const buttonsPressedDataObj = getNumberRepetitionsGroupedByScore(filteredCards);
@@ -339,16 +398,16 @@ export const Statistics = () => {
 
   // Time statistics data
   const timeStatsData = React.useMemo(() => {
-    const startTs = dateStart ? new Date(dateStart).getTime() : 0;
-    const endTs = dateEnd ? new Date(dateEnd).getTime() + (24 * 60 * 60 * 1000) : Infinity;
+    const { start: startTs, end: endTs } = getAnalysisTimestamps(committedAnalysisRange);
     return getTimeSpentPerDay(activeCardsSource, startTs, endTs);
-  }, [activeCardsSource, dateStart, dateEnd]);
+  }, [activeCardsSource, committedAnalysisRange]);
 
   const timeStatsSummary = React.useMemo(() => {
-    const startTs = dateStart ? new Date(dateStart).getTime() : undefined;
-    const endTs = dateEnd ? new Date(dateEnd).getTime() + (24 * 60 * 60 * 1000) : undefined;
+    const analysisTimestamps = committedAnalysisRange ? getAnalysisTimestamps(committedAnalysisRange) : undefined;
+    const startTs = analysisTimestamps?.start;
+    const endTs = analysisTimestamps?.end;
     return calculateTimeStatsSummary(timeStatsData, startTs, endTs);
-  }, [timeStatsData, dateStart, dateEnd]);
+  }, [timeStatsData, committedAnalysisRange]);
 
   const recallSpeedData = React.useMemo(() => {
     return getRecallSpeedPerDay(timeStatsData);
@@ -386,6 +445,32 @@ export const Statistics = () => {
     </button>
   );
 
+  const dateRangeError = React.useMemo(() => {
+    if (!dateStart && !dateEnd) return undefined;
+    if (!dateStart || !dateEnd) return 'Enter both a start date and an end date.';
+    const normalized = normalizeAnalysisRange({ start: dateStart, end: dateEnd }, availableDateRange);
+    if (!normalized) return 'Choose a valid date range where the start is not after the end.';
+    if (normalized.start !== dateStart || normalized.end !== dateEnd) {
+      return 'Choose dates within the available review history.';
+    }
+    return undefined;
+  }, [availableDateRange, dateEnd, dateStart]);
+
+  const handleExactDateChange = (field: 'start' | 'end', value: string) => {
+    const nextStart = field === 'start' ? value : dateStart;
+    const nextEnd = field === 'end' ? value : dateEnd;
+    if (field === 'start') setDateStart(value);
+    if (field === 'end') setDateEnd(value);
+
+    const validRange = normalizeAnalysisRange(
+      { start: nextStart, end: nextEnd },
+      availableDateRange
+    );
+    if (validRange && validRange.start === nextStart && validRange.end === nextEnd) {
+      commitDateRange(nextStart, nextEnd, 'All');
+    }
+  };
+
   
 
   return (
@@ -398,7 +483,8 @@ export const Statistics = () => {
         maxWidth: '100vw',
         maxHeight: '100vh',
         overflow: 'hidden',
-        ...containerStyle
+        ...containerStyle,
+        ['--statistics-accent' as string]: chartColor,
       }} 
       className="statisticsBody"
     >
@@ -623,23 +709,43 @@ export const Statistics = () => {
             </div>
           </div>
 
+          <div className="mt-4">
+            <DateRangeTimeline
+              bounds={availableDateRange}
+              range={selectedAnalysisRange}
+              onChange={(nextRange) => {
+                setDateStart(nextRange.start);
+                setDateEnd(nextRange.end);
+                setRangeMode('All');
+              }}
+              onCommit={(nextRange) => commitDateRange(nextRange.start, nextRange.end, 'All')}
+              disabled={!availableDateRange}
+            />
+          </div>
+
           <div className="flex flex-wrap gap-2 md:gap-4 items-end mt-2">
             <div className="flex flex-col flex-1 min-w-[120px]">
-              <span className="text-xs opacity-70 mb-1">Start Date</span>
+              <label htmlFor="statistics-start-date" className="text-xs opacity-70 mb-1">Start Date</label>
               <input 
+                id="statistics-start-date"
                 type="date" 
                 value={dateStart} 
-                onChange={(e) => { setDateStart(e.target.value); setRangeMode('All'); }}
+                aria-invalid={Boolean(dateRangeError)}
+                aria-describedby={dateRangeError ? 'statistics-date-error' : undefined}
+                onChange={(e) => handleExactDateChange('start', e.target.value)}
                 className="border rounded px-2 py-1 text-sm w-full"
                 style={inputStyle}
               />
             </div>
             <div className="flex flex-col flex-1 min-w-[120px]">
-              <span className="text-xs opacity-70 mb-1">End Date</span>
+              <label htmlFor="statistics-end-date" className="text-xs opacity-70 mb-1">End Date</label>
               <input 
+                id="statistics-end-date"
                 type="date" 
                 value={dateEnd} 
-                onChange={(e) => { setDateEnd(e.target.value); setRangeMode('All'); }}
+                aria-invalid={Boolean(dateRangeError)}
+                aria-describedby={dateRangeError ? 'statistics-date-error' : undefined}
+                onChange={(e) => handleExactDateChange('end', e.target.value)}
                 className="border rounded px-2 py-1 text-sm w-full"
                 style={inputStyle}
               />
@@ -653,68 +759,48 @@ export const Statistics = () => {
                  Clear Filter
                </button>
             )}
+            {dateRangeError && <div id="statistics-date-error" className="w-full text-xs" style={{ color: '#ef4444' }}>{dateRangeError}</div>}
           </div>
         </div>
         </div>
       </div>
 
+      <div className="sr-only" aria-live="polite">{rangeAnnouncement}</div>
+      
       {/* --- CONTENT --- */}
       
-      {isLoadingContext ? (
-        <div className="flex flex-col justify-center items-center h-64 fade-in">
-          <div className="loading-pulse mb-4">
-            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: chartColor }}>
-              <line x1="12" y1="2" x2="12" y2="6"></line>
-              <line x1="12" y1="18" x2="12" y2="22"></line>
-              <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line>
-              <line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line>
-              <line x1="2" y1="12" x2="6" y2="12"></line>
-              <line x1="18" y1="12" x2="22" y2="12"></line>
-              <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line>
-              <line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line>
-            </svg>
-          </div>
-          <div className="text-lg font-medium" style={{ color: 'var(--rn-clr-content-primary)' }}>
-            Loading context data...
-          </div>
-          <div className="text-sm opacity-60 mt-2">
-            Analyzing flashcards in the selected scope
-          </div>
-        </div>
+      {isLoadingContext || isRangeRefreshing ? (
+        <DashboardSkeleton />
+      ) : contextMode === 'Current' && scopeError ? (
+        <ErrorState onRetry={() => setScopeRetry(value => value + 1)} />
       ) : !activeCardsSource || activeCardsSource.length === 0 ? (
-        <div className="flex flex-col justify-center items-center h-64 fade-in">
-          <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--rn-clr-content-tertiary)', marginBottom: '1rem' }}>
-            <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
-            <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
-          </svg>
-          <div className="text-xl font-medium mb-2" style={{ color: 'var(--rn-clr-content-primary)' }}>
-            No flashcards found
-          </div>
-          <div className="text-sm opacity-60 text-center max-w-md">
-            {contextMode === 'Global' 
-              ? 'Start creating flashcards to see your statistics here.' 
-              : 'No flashcards found in the selected context. Try switching to Global mode or selecting a different Rem.'}
-          </div>
-        </div>
+        <EmptyState
+          title="No flashcards found"
+          description={contextMode === 'Global'
+            ? 'Start creating flashcards to see your statistics here.'
+            : 'No flashcards found in the selected context. Try switching to Global mode or selecting a different Rem.'}
+        />
       ) : (
         <>
+          {selectedReviewCount === 0 && (
+            <div className="mb-6">
+              <EmptyState
+                title="No reviews in this period"
+                description="The selected scope has cards, but no review activity in this date range. Try widening the range to see historical activity."
+              />
+            </div>
+          )}
           {/* SECTION 1: HEATMAP */}
           <div className="mb-6 md:mb-10 fade-in">
-            <div className="flex items-center gap-2 md:gap-3 mb-4 md:mb-6">
-              <div className="p-1.5 md:p-2 rounded-lg" style={{ backgroundColor: 'var(--rn-clr-background-secondary)' }}>
+            <SectionHeader title="Study Overview" description="Daily review activity and learning consistency" icon={
                 <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 md:w-6 md:h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: chartColor }}>
                   <rect x="3" y="3" width="7" height="7"></rect>
                   <rect x="14" y="3" width="7" height="7"></rect>
                   <rect x="14" y="14" width="7" height="7"></rect>
                   <rect x="3" y="14" width="7" height="7"></rect>
                 </svg>
-              </div>
-              <div>
-                <div className="font-bold text-lg md:text-xl">Review Heatmap</div>
-                <div className="text-xs md:text-sm opacity-60 hidden sm:block">Daily review activity visualization</div>
-              </div>
-            </div>
-            <div className="chart-container">
+            } />
+            <ChartCard>
             {renderHeatmap(
               categorizeDataByWeekday(heatmapData), 
               heatmapColorLow, 
@@ -723,21 +809,12 @@ export const Statistics = () => {
               heatmapMidPoint,
               heatmapTarget
             )}
-            </div>
+            </ChartCard>
             
-            <div className="mt-6 grid grid-cols-2 md:grid-cols-3 gap-4">
-              <div className="stat-card p-4 border rounded-lg text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-primary)' }}>
-                <div className="text-xs uppercase tracking-wide opacity-60 mb-2">Days Learned</div>
-                <div className="text-3xl font-bold" style={{ color: chartColor }}>{daysLearned}</div>
-              </div>
-              <div className="stat-card p-4 border rounded-lg text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-primary)' }}>
-                <div className="text-xs uppercase tracking-wide opacity-60 mb-2">Daily Average</div>
-                <div className="text-3xl font-bold" style={{ color: chartColor }}>{isNaN(dailyAverage) ? 0 : dailyAverage}</div>
-              </div>
-              <div className="stat-card p-4 border rounded-lg text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-primary)' }}>
-                <div className="text-xs uppercase tracking-wide opacity-60 mb-2">Longest Streak</div>
-                <div className="text-3xl font-bold" style={{ color: chartColor }}>{longestStreak} days</div>
-              </div>
+            <div className="metric-grid metric-grid-three mt-6">
+              <MetricCard label="Days Learned" value={daysLearned} supporting="Days with at least one review" accent={chartColor} />
+              <MetricCard label="Daily Average" value={isNaN(dailyAverage) ? 0 : dailyAverage} supporting="Reviews per calendar day" accent={chartColor} />
+              <MetricCard label="Longest Streak" value={`${longestStreak} days`} supporting="Consecutive review days" accent={chartColor} />
             </div>
           </div>
 
@@ -745,20 +822,14 @@ export const Statistics = () => {
 
           {/* SECTION 2: REVIEW STATISTICS */}
           <div className="mb-6 md:mb-10 fade-in">
-            <div className="flex items-center gap-2 md:gap-3 mb-4 md:mb-6">
-              <div className="p-1.5 md:p-2 rounded-lg" style={{ backgroundColor: 'var(--rn-clr-background-secondary)' }}>
+            <SectionHeader title="Review Performance" description="Retention, review volume, outcomes, and total time" icon={
                 <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 md:w-6 md:h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: chartColor }}>
                   <path d="M3 3v18h18"></path>
                   <path d="M18 17V9"></path>
                   <path d="M13 17V5"></path>
                   <path d="M8 17v-3"></path>
                 </svg>
-              </div>
-              <div>
-                <div className="font-bold text-lg md:text-xl">Review Statistics</div>
-                <div className="text-xs md:text-sm opacity-60 hidden sm:block">Performance metrics and review distribution</div>
-              </div>
-            </div>
+            } />
 
             {/* Metrics Grid */}
             <div className="mb-6 md:mb-8 grid grid-cols-2 lg:grid-cols-5 gap-2 md:gap-4">
@@ -889,6 +960,12 @@ export const Statistics = () => {
               </div>
             </div>
 
+            <SectionHeader
+              title="Review Behavior"
+              description="Button choices, repetition patterns, and retention trends"
+              icon={<span aria-hidden="true">↗</span>}
+            />
+
             <div className="space-y-4 md:space-y-6">
 
             <div className="chart-container">
@@ -927,6 +1004,12 @@ export const Statistics = () => {
                 'Retention rate by time of day'
               )}
             </div>
+
+            <SectionHeader
+              title="Speed and Efficiency"
+              description="Time spent, recall speed, and response-time distribution"
+              icon={<span aria-hidden="true">◷</span>}
+            />
 
             <div className="chart-container">
               {chart_time_spent(
@@ -967,7 +1050,7 @@ export const Statistics = () => {
                   </svg>
                 </div>
                 <div>
-                  <div className="font-bold text-lg md:text-xl">Outlook</div>
+                  <div className="font-bold text-lg md:text-xl">Plan Ahead</div>
                   <div className="text-xs md:text-sm opacity-60 hidden sm:block">Upcoming due cards forecast</div>
                 </div>
               </div>
@@ -1020,7 +1103,7 @@ export const Statistics = () => {
                   </svg>
                 </div>
                 <div>
-                  <div className="font-bold text-lg md:text-xl">Hardest Flashcards</div>
+                  <div className="font-bold text-lg md:text-xl">Cards to Improve</div>
                   <div className="text-xs md:text-sm opacity-60 hidden sm:block">Cards with lowest retention rate (min. 3 reviews)</div>
                 </div>
               </div>

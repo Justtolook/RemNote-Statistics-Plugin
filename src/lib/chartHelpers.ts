@@ -5,11 +5,18 @@ import { Card } from '@remnote/plugin-sdk';
  */
 export let chartColor = '#3362f0';
 
+const HEX_COLOR_PATTERN = /^#[0-9A-F]{6}$/i;
+
+/** Returns the configured accent when valid, otherwise RemNote's native link token. */
+export function getSafeChartAccent(color: string = chartColor): string {
+  return HEX_COLOR_PATTERN.test(color) ? color : 'var(--rn-clr-link)';
+}
+
 /**
  * Updates the global chart color
  */
 export function setChartColor(color: string) {
-  chartColor = color;
+  if (HEX_COLOR_PATTERN.test(color)) chartColor = color;
 }
 
 /**
@@ -47,7 +54,7 @@ export function getCommonChartOptions(title: string, xaxisType: 'datetime' | 'ca
       offsetX: 0,
       offsetY: 0
     },
-    colors: [chartColor],
+    colors: [getSafeChartAccent()],
     xaxis: {
       type: xaxisType,
       labels: { 
@@ -63,7 +70,6 @@ export function getCommonChartOptions(title: string, xaxisType: 'datetime' | 'ca
       }
     },
     tooltip: {
-      theme: 'light' as const,
       style: {
         fontSize: '12px',
         fontFamily: 'inherit'
@@ -71,7 +77,7 @@ export function getCommonChartOptions(title: string, xaxisType: 'datetime' | 'ca
     },
     grid: {
       show: true,
-      borderColor: 'var(--rn-clr-border-light-accent)',
+      borderColor: 'var(--rn-clr-border-light-accent, var(--rn-clr-border-primary))',
       strokeDashArray: 4,
       position: 'back' as const,
       xaxis: {
@@ -153,9 +159,10 @@ export function getInputStyle() {
  * Gets button style based on selection state
  */
 export function getButtonStyle(isSelected: boolean, color: string = chartColor) {
+  const safeColor = getSafeChartAccent(color);
   return {
-    backgroundColor: isSelected ? color : 'var(--rn-clr-background-primary)',
-    color: isSelected ? '#fff' : 'var(--rn-clr-content-secondary)',
+    backgroundColor: isSelected ? safeColor : 'var(--rn-clr-background-primary)',
+    color: isSelected ? 'var(--rn-clr-background-primary)' : 'var(--rn-clr-content-secondary)',
     border: isSelected ? 'none' : '1px solid var(--rn-clr-border-primary)',
     boxShadow: isSelected ? '0 2px 8px rgba(0, 0, 0, 0.15)' : '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
     fontWeight: isSelected ? 600 : 400,

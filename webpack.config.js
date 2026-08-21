@@ -16,10 +16,11 @@ const isDevelopment = !isProd;
 const fastRefresh = isDevelopment ? new ReactRefreshWebpackPlugin() : null;
 
 const SANDBOX_SUFFIX = '-sandbox';
+const widgetEntryFiles = new Set(['index.tsx', 'queue-toolbar-button.tsx', 'statistics.tsx']);
 
 const config = {
   mode: isProd ? 'production' : 'development',
-  entry: glob.sync('./src/widgets/**.tsx').reduce(function (obj, el) {
+  entry: glob.sync('./src/widgets/**.tsx').filter((el) => widgetEntryFiles.has(path.basename(el))).reduce(function (obj, el) {
     obj[path.parse(el).name] = el;
     obj[path.parse(el).name + SANDBOX_SUFFIX] = el;
     return obj;

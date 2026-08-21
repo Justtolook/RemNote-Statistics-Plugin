@@ -5,6 +5,7 @@
   "license": "MIT",
   "scripts": {
     "check-types": "tsc",
+    "test-statistics": "ts-node --project ./tsconfig.json ./scripts/testStatistics.ts",
     "dev": "cross-env NODE_ENV=development webpack-dev-server --color --progress --no-open",
     "validate": "ts-node --project ./tsconfig.json ./scripts/validate.ts",
     "build": "npm run validate && rm -rf dist && cross-env NODE_ENV=production webpack --color --progress && cp README.md dist && cd dist && zip -r ../PluginZip.zip ./*"
