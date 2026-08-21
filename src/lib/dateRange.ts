@@ -172,3 +172,14 @@ export function getDateRangeLabel(range?: AnalysisRange): string {
     if (!range) return 'All available days';
     return `${range.start} – ${range.end}`;
 }
+
+export function getAnalysisRangeCommit(
+    committedRange: AnalysisRange,
+    draftRange: AnalysisRange
+): AnalysisRange | undefined {
+    if (committedRange.start === draftRange.start && committedRange.end === draftRange.end) {
+        return undefined;
+    }
+
+    return draftRange;
+}

@@ -2,6 +2,7 @@ import assert from 'assert';
 import {
     addCalendarDays,
     filterCardsByRange,
+    getAnalysisRangeCommit,
     getAvailableDateRange,
     getDateAtIndex,
     getMonthMarkers,
@@ -39,6 +40,10 @@ const range = { start: '2024-01-01', end: '2024-01-03' };
 assert.deepStrictEqual(updateAnalysisRange(range, bounds, 'start', 0), range);
 assert.deepStrictEqual(updateAnalysisRange(range, bounds, 'start', 10), { start: '2024-01-03', end: '2024-01-03' });
 assert.deepStrictEqual(updateAnalysisRange(range, bounds, 'end', 2), range);
+const draftRange = updateAnalysisRange(range, bounds, 'start', 1);
+assert.deepStrictEqual(getAnalysisRangeCommit(range, draftRange), draftRange);
+assert.equal(getAnalysisRangeCommit(range, range), undefined);
+assert.equal(getAnalysisRangeCommit(range, { ...range }), undefined);
 assert.equal(getDateAtIndex(31, bounds), '2024-02-01');
 assert.equal(filterCardsByRange(cards, range)[0].repetitionHistory?.length, 2);
 assert.equal(filterCardsByRange(cards, range)[1].repetitionHistory?.length, 0);

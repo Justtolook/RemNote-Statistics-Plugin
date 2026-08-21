@@ -5,6 +5,7 @@ import {
     getDateIndex,
     getDateRangeLabel,
     getMonthMarkers,
+    getAnalysisRangeCommit,
     updateAnalysisRange,
 } from '../lib/dateRange';
 
@@ -142,45 +143,89 @@ export function ErrorState({ onRetry }: { onRetry: () => void }) {
 interface DateRangeTimelineProps {
     bounds?: AvailableDateRange;
     range?: AnalysisRange;
-    onChange: (range: AnalysisRange) => void;
     onCommit: (range: AnalysisRange) => void;
     disabled?: boolean;
 }
 
-export function DateRangeTimeline({ bounds, range, onChange, onCommit, disabled = false }: DateRangeTimelineProps) {
+export function DateRangeTimeline({ bounds, range, onCommit, disabled = false }: DateRangeTimelineProps) {
     const [activeHandle, setActiveHandle] = React.useState<'start' | 'end'>('end');
+    const [draftRange, setDraftRange] = React.useState<AnalysisRange | undefined>(range);
+    const draftRangeRef = React.useRef<AnalysisRange | undefined>(range);
+    const committedRangeRef = React.useRef<AnalysisRange | undefined>(range);
+    const pointerInteractionRef = React.useRef(false);
+    const keyboardInteractionRef = React.useRef(false);
 
-    if (!bounds || !range || bounds.days.length === 0) {
+    React.useEffect(() => {
+        draftRangeRef.current = range;
+        committedRangeRef.current = range;
+        pointerInteractionRef.current = false;
+        keyboardInteractionRef.current = false;
+        setDraftRange(range);
+    }, [bounds?.days.length, bounds?.end, bounds?.start, range?.end, range?.start]);
+
+    if (!bounds || !draftRange || bounds.days.length === 0) {
         return <div className="timeline-empty">Date range becomes available after review data loads.</div>;
     }
 
     const max = bounds.days.length - 1;
-    const startIndex = getDateIndex(range.start, bounds);
-    const endIndex = getDateIndex(range.end, bounds);
+    const startIndex = getDateIndex(draftRange.start, bounds);
+    const endIndex = getDateIndex(draftRange.end, bounds);
     const startPercent = max === 0 ? 0 : (startIndex / max) * 100;
     const endPercent = max === 0 ? 100 : (endIndex / max) * 100;
     const markers = getMonthMarkers(bounds);
-    const updateRange = (handle: 'start' | 'end', value: number) => {
-        onChange(updateAnalysisRange(range, bounds, handle, value));
+    const updateDraftRange = (handle: 'start' | 'end', value: number) => {
+        const currentRange = draftRangeRef.current;
+        if (!currentRange) return;
+
+        const nextRange = updateAnalysisRange(currentRange, bounds, handle, value);
+        draftRangeRef.current = nextRange;
+        setDraftRange(nextRange);
     };
 
-    const commitRange = (handle: 'start' | 'end', value: number) => {
-        onCommit(updateAnalysisRange(range, bounds, handle, value));
+    const commitDraftRange = () => {
+        const currentRange = draftRangeRef.current;
+        const committedRange = committedRangeRef.current;
+        const hasActiveInteraction = pointerInteractionRef.current || keyboardInteractionRef.current;
+        if (!currentRange || !committedRange || !hasActiveInteraction) return;
+
+        pointerInteractionRef.current = false;
+        keyboardInteractionRef.current = false;
+        const nextRange = getAnalysisRangeCommit(committedRange, currentRange);
+        if (!nextRange) return;
+
+        committedRangeRef.current = currentRange;
+        onCommit(nextRange);
+    };
+
+    const cancelInteraction = () => {
+        pointerInteractionRef.current = false;
+        keyboardInteractionRef.current = false;
+        draftRangeRef.current = committedRangeRef.current;
+        setDraftRange(committedRangeRef.current);
+    };
+
+    const isRangeKeyboardEvent = (event: React.KeyboardEvent<HTMLInputElement>) => {
+        return ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key);
     };
 
     return (
-        <div className="date-timeline" aria-label={`Selected dates: ${getDateRangeLabel(range)}`}>
+        <div className="date-timeline" aria-label={`Selected dates: ${getDateRangeLabel(draftRange)}`}>
             <div className="date-timeline-labels">
-                <span>Start: <strong>{range.start}</strong></span>
-                <span>End: <strong>{range.end}</strong></span>
+                <span>Start: <strong>{draftRange.start}</strong></span>
+                <span>End: <strong>{draftRange.end}</strong></span>
             </div>
             <div className="date-timeline-track-wrap">
                 <div className="date-timeline-track" />
                 <div className="date-timeline-selected" style={{ left: `${startPercent}%`, right: `${100 - endPercent}%` }} />
-                {markers.map(marker => {
+                {markers.map((marker, index) => {
                     const left = max === 0 ? 0 : (marker.index / max) * 100;
+                    const markerPosition = marker.index === 0
+                        ? 'date-timeline-marker-first'
+                        : marker.index === max
+                            ? 'date-timeline-marker-last'
+                            : 'date-timeline-marker-middle';
                     return (
-                        <div className="date-timeline-marker" style={{ left: `${left}%` }} key={marker.date}>
+                        <div className={`date-timeline-marker ${markerPosition}`} style={{ left: `${left}%` }} key={marker.date}>
                             <span>{marker.label}</span>
                         </div>
                     );
@@ -192,18 +237,33 @@ export function DateRangeTimeline({ bounds, range, onChange, onCommit, disabled 
                     max={max}
                     step={1}
                     value={startIndex}
-                    disabled={disabled}
                     aria-label="Start date"
                     aria-valuemin={0}
                     aria-valuemax={max}
                     aria-valuenow={startIndex}
-                    aria-valuetext={range.start}
-                    onChange={event => updateRange('start', Number(event.target.value))}
-                    onPointerDown={() => setActiveHandle('start')}
-                    onKeyUp={event => commitRange('start', Number(event.currentTarget.value))}
-                    onMouseUp={event => commitRange('start', Number(event.currentTarget.value))}
-                    onTouchEnd={event => commitRange('start', Number(event.currentTarget.value))}
-                    onBlur={event => commitRange('start', Number(event.currentTarget.value))}
+                    aria-valuetext={draftRange.start}
+                    disabled={disabled}
+                    onChange={event => updateDraftRange('start', Number(event.target.value))}
+                    onFocus={() => setActiveHandle('start')}
+                    onPointerDown={event => {
+                        setActiveHandle('start');
+                        pointerInteractionRef.current = true;
+                        event.currentTarget.setPointerCapture(event.pointerId);
+                    }}
+                    onPointerUp={() => requestAnimationFrame(commitDraftRange)}
+                    onPointerCancel={cancelInteraction}
+                    onKeyDown={event => {
+                        if (event.key === 'Escape') {
+                            event.preventDefault();
+                            cancelInteraction();
+                            return;
+                        }
+                        if (isRangeKeyboardEvent(event)) keyboardInteractionRef.current = true;
+                    }}
+                    onKeyUp={event => {
+                        if (isRangeKeyboardEvent(event)) commitDraftRange();
+                    }}
+                    onBlur={commitDraftRange}
                 />
                 <input
                     className={`date-timeline-input date-timeline-end ${activeHandle === 'end' ? 'date-timeline-active' : ''}`}
@@ -212,21 +272,36 @@ export function DateRangeTimeline({ bounds, range, onChange, onCommit, disabled 
                     max={max}
                     step={1}
                     value={endIndex}
-                    disabled={disabled}
                     aria-label="End date"
                     aria-valuemin={0}
                     aria-valuemax={max}
                     aria-valuenow={endIndex}
-                    aria-valuetext={range.end}
-                    onChange={event => updateRange('end', Number(event.target.value))}
-                    onPointerDown={() => setActiveHandle('end')}
-                    onKeyUp={event => commitRange('end', Number(event.currentTarget.value))}
-                    onMouseUp={event => commitRange('end', Number(event.currentTarget.value))}
-                    onTouchEnd={event => commitRange('end', Number(event.currentTarget.value))}
-                    onBlur={event => commitRange('end', Number(event.currentTarget.value))}
+                    aria-valuetext={draftRange.end}
+                    disabled={disabled}
+                    onChange={event => updateDraftRange('end', Number(event.target.value))}
+                    onFocus={() => setActiveHandle('end')}
+                    onPointerDown={event => {
+                        setActiveHandle('end');
+                        pointerInteractionRef.current = true;
+                        event.currentTarget.setPointerCapture(event.pointerId);
+                    }}
+                    onPointerUp={() => requestAnimationFrame(commitDraftRange)}
+                    onPointerCancel={cancelInteraction}
+                    onKeyDown={event => {
+                        if (event.key === 'Escape') {
+                            event.preventDefault();
+                            cancelInteraction();
+                            return;
+                        }
+                        if (isRangeKeyboardEvent(event)) keyboardInteractionRef.current = true;
+                    }}
+                    onKeyUp={event => {
+                        if (isRangeKeyboardEvent(event)) commitDraftRange();
+                    }}
+                    onBlur={commitDraftRange}
                 />
             </div>
-            <div className="date-timeline-range-label">{getDateRangeLabel(range)}</div>
+            <div className="date-timeline-range-label">{getDateRangeLabel(draftRange)}</div>
         </div>
     );
 }

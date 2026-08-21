@@ -327,13 +327,6 @@ export const Statistics = () => {
     );
   }, [analysisDateStart, analysisDateEnd, availableDateRange]);
 
-  const selectedAnalysisRange = React.useMemo<AnalysisRange | undefined>(() => {
-    if (!dateStart || !dateEnd) return committedAnalysisRange || availableDateRange;
-    const normalized = normalizeAnalysisRange({ start: dateStart, end: dateEnd }, availableDateRange);
-    if (normalized && normalized.start === dateStart && normalized.end === dateEnd) return normalized;
-    return committedAnalysisRange || availableDateRange;
-  }, [availableDateRange, committedAnalysisRange, dateStart, dateEnd]);
-
   // -- Filtered Data for History Charts --
   const filteredCards = React.useMemo(() => {
     if (!activeCardsSource) return [];
@@ -712,12 +705,7 @@ export const Statistics = () => {
           <div className="mt-4">
             <DateRangeTimeline
               bounds={availableDateRange}
-              range={selectedAnalysisRange}
-              onChange={(nextRange) => {
-                setDateStart(nextRange.start);
-                setDateEnd(nextRange.end);
-                setRangeMode('All');
-              }}
+              range={committedAnalysisRange || availableDateRange}
               onCommit={(nextRange) => commitDateRange(nextRange.start, nextRange.end, 'All')}
               disabled={!availableDateRange}
             />
@@ -1075,7 +1063,7 @@ export const Statistics = () => {
               </div>
             </div>
 
-            <div className="stat-card p-3 md:p-4 border rounded-lg mb-4 md:mb-6 text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-secondary)' }}>
+            <div className="stat-card statistics-compact-card p-3 md:p-4 border rounded-lg mb-4 md:mb-6 text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-secondary)' }}>
               <div className="text-xs md:text-sm opacity-70 mb-1">Total Due Cards (Next {dueOutlook} Days)</div>
               <div className="text-2xl md:text-4xl font-bold" style={{ color: chartColor }}>{dueCardsTotal.toLocaleString()}</div>
             </div>
@@ -1676,7 +1664,7 @@ function chart_retention_by_time_of_day(
 
   return <div>
     {bestBlock && (
-      <div className="stat-card p-3 md:p-4 border rounded-lg mb-4 md:mb-6 text-center" style={{borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-secondary)' }}>
+      <div className="stat-card statistics-compact-card p-3 md:p-4 border rounded-lg mb-4 md:mb-6 text-center" style={{borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-secondary)' }}>
         <div className="text-xs md:text-sm opacity-70 mb-1">🎯 Most Productive Time</div>
         <div className="text-lg font-bold" style={{ color: '#10b981' }}>
           {bestBlock.timeBlock}
@@ -1978,11 +1966,8 @@ function chart_recall_speed(
   };
 
   return <div>
-    <div className="stat-card mb-4 md:mb-6 p-3 md:p-4 border rounded-lg" style={{
-      borderColor: 'var(--rn-clr-border-primary)',
-      backgroundColor: 'var(--rn-clr-background-primary)'
-    }}>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
+    <div className="response-summary-grid mb-3 md:mb-4">
+      <div className="stat-card response-summary-card">
         <div className="text-center">
           <div className="text-[10px] md:text-xs uppercase tracking-wide opacity-60 mb-1 md:mb-2">Response Time</div>
           <div className="text-lg md:text-xl font-bold" style={{ color: chartColor }}>
@@ -1992,6 +1977,8 @@ function chart_recall_speed(
             Latest {summary?.studyDaysIncluded || 0} study day{summary?.studyDaysIncluded === 1 ? '' : 's'}
           </div>
         </div>
+      </div>
+      <div className="stat-card response-summary-card">
         <div className="text-center">
           <div className="text-[10px] md:text-xs uppercase tracking-wide opacity-60 mb-1 md:mb-2">Trend</div>
           <div className="text-sm md:text-base font-bold" style={{ color: comparisonColor }}>
@@ -2004,9 +1991,9 @@ function chart_recall_speed(
           )}
         </div>
       </div>
-      <div className="mt-2 md:mt-3 text-[10px] md:text-xs text-center opacity-60">
-        Daily averages and medians use the 5th–95th percentile of response times.
-      </div>
+    </div>
+    <div className="response-summary-note mb-4 md:mb-6">
+      Daily averages and medians use the 5th–95th percentile of response times.
     </div>
 
     <Chart

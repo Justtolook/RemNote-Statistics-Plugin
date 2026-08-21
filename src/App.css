@@ -200,6 +200,32 @@
   line-height: 1.4;
 }
 
+.statisticsBody .statistics-compact-card {
+  min-height: 0;
+  padding: 0.75rem 1rem;
+}
+
+.response-summary-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem;
+}
+
+.response-summary-card {
+  min-height: 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--rn-clr-border-primary);
+  border-radius: 8px;
+  background: var(--rn-clr-background-primary);
+}
+
+.response-summary-note {
+  color: var(--rn-clr-content-tertiary, var(--rn-clr-content-secondary));
+  font-size: 10px;
+  line-height: 1.4;
+  text-align: center;
+}
+
 .chart-card {
   border: 1px solid var(--rn-clr-border-light-accent, var(--rn-clr-border-primary));
   border-radius: 8px;
@@ -269,6 +295,22 @@
   font-size: 12px;
 }
 
+.date-timeline-labels {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.date-timeline-labels > span {
+  min-width: 0;
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
+.date-timeline-labels > span:last-child {
+  text-align: right;
+}
+
 .date-timeline-labels strong,
 .date-timeline-range-label {
   color: var(--rn-clr-content-primary);
@@ -319,7 +361,31 @@
   left: 0.25rem;
   color: var(--rn-clr-content-secondary);
   font-size: 10px;
-  white-space: nowrap;
+  line-height: 1.2;
+  max-width: 5.5rem;
+  text-align: center;
+  white-space: normal;
+}
+
+.date-timeline-marker-first span {
+  left: 0;
+  text-align: left;
+}
+
+.date-timeline-marker-last span {
+  left: 0;
+  transform: translateX(-100%);
+  text-align: right;
+}
+
+.date-timeline-marker-middle span {
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.date-timeline-marker-single span {
+  left: 0;
+  text-align: left;
 }
 
 .date-timeline-input {
@@ -439,6 +505,7 @@
 
 @media (min-width: 768px) {
   .metric-grid { gap: 1rem; }
+  .response-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (min-width: 1024px) {
@@ -463,5 +530,11 @@
 
   .animate-bounce {
     animation: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .date-timeline-marker-middle span {
+    display: none;
   }
 }
