@@ -40,12 +40,15 @@ export function formatDateOnly(date: Date): DateOnly {
     return date.toISOString().slice(0, 10);
 }
 
-export function dateOnlyFromTimestamp(timestamp: number): DateOnly {
-    const date = new Date(timestamp);
+export function formatLocalDateOnly(date: Date): DateOnly {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+}
+
+export function dateOnlyFromTimestamp(timestamp: number): DateOnly {
+    return formatLocalDateOnly(new Date(timestamp));
 }
 
 export function dateOnlyToTimestamp(value: DateOnly): number {
@@ -77,7 +80,7 @@ export function getCalendarDays(start: DateOnly, end: DateOnly): DateOnly[] {
     return days;
 }
 
-export function getAvailableDateRange(cards: ReviewHistorySource[]): AvailableDateRange | undefined {
+export function getAvailableDateRange(cards: ReviewHistorySource[], today: DateOnly | Date = new Date()): AvailableDateRange | undefined {
     const reviewDays = cards
         .flatMap(card => (card.repetitionHistory || [])
             .filter(review => Number.isFinite(review.date) && !Number.isNaN(new Date(review.date).getTime()))
@@ -87,7 +90,11 @@ export function getAvailableDateRange(cards: ReviewHistorySource[]): AvailableDa
     if (reviewDays.length === 0) return undefined;
 
     const start = reviewDays[0];
-    const end = reviewDays[reviewDays.length - 1];
+    const latestReviewDay = reviewDays[reviewDays.length - 1];
+    const todayDateOnly = typeof today === 'string' ? today : formatLocalDateOnly(today);
+    const end = compareDateOnly(latestReviewDay, todayDateOnly) > 0
+        ? latestReviewDay
+        : todayDateOnly;
     return { start, end, days: getCalendarDays(start, end) };
 }
 

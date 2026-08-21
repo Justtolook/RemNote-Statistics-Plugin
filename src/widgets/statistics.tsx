@@ -5,6 +5,7 @@ import { getComprehensiveContextRems } from '../lib/utils';
 import {
   AnalysisRange,
   filterCardsByRange,
+  formatLocalDateOnly,
   getAvailableDateRange,
   normalizeAnalysisRange,
 } from '../lib/dateRange';
@@ -75,8 +76,8 @@ export const Statistics = () => {
     const end = t;
     return {
       mode: 'This Year' as RangeMode,
-      start: start.toISOString().split('T')[0],
-      end: end.toISOString().split('T')[0]
+      start: formatLocalDateOnly(start),
+      end: formatLocalDateOnly(end)
     };
   };
 
@@ -241,9 +242,10 @@ export const Statistics = () => {
   }, [contextMode, contextRemId, scopeMode]);
 
   const activeCardsSource = contextMode === 'Global' ? allGlobalCards : allCardsInContext;
+  const todayDateOnly = formatLocalDateOnly(new Date());
   const availableDateRange = React.useMemo(() => {
-    return getAvailableDateRange((activeCardsSource || []) as Array<{ repetitionHistory?: Array<{ date: number }> | null }>);
-  }, [activeCardsSource]);
+    return getAvailableDateRange((activeCardsSource || []) as Array<{ repetitionHistory?: Array<{ date: number }> | null }>, todayDateOnly);
+  }, [activeCardsSource, todayDateOnly]);
 
   const commitDateRange = React.useCallback((start: string, end: string, mode: RangeMode = 'All') => {
     setDateStart(start);
@@ -315,7 +317,7 @@ export const Statistics = () => {
         return;
     }
 
-    commitDateRange(start.toISOString().split('T')[0], end.toISOString().split('T')[0], mode);
+    commitDateRange(formatLocalDateOnly(start), formatLocalDateOnly(end), mode);
   };
   
   const isLoadingContext = activeCardsSource === undefined && !(contextMode === 'Current' && !contextRemId);
@@ -820,134 +822,46 @@ export const Statistics = () => {
             } />
 
             {/* Metrics Grid */}
-            <div className="mb-6 md:mb-8 grid grid-cols-2 lg:grid-cols-5 gap-2 md:gap-4">
-              <div className="stat-card p-3 md:p-4 border rounded-lg text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-primary)' }}>
-                <div className="text-[10px] md:text-xs uppercase tracking-wide opacity-60 mb-1 md:mb-2 flex items-center justify-center gap-1">
-                  Retention Rate
-                  <div 
-                    className="opacity-50 hover:opacity-100 cursor-help transition-opacity"
-                    title="The percentage of reviews where you successfully recalled the answer (Score > Forgot).&#010;Calculation: (Hard + Good + Easy) / Total Reviews"
-                  >
-                    <svg 
-                      xmlns="http://www.w3.org/2000/svg" 
-                      width="14" 
-                      height="14" 
-                      viewBox="0 0 24 24" 
-                      fill="none" 
-                      stroke="currentColor" 
-                      strokeWidth="2" 
-                      strokeLinecap="round" 
-                      strokeLinejoin="round"
-                    >
-                      <circle cx="12" cy="12" r="10"></circle>
-                      <line x1="12" y1="16" x2="12" y2="12"></line>
-                      <line x1="12" y1="8" x2="12.01" y2="8"></line>
-                    </svg>
-                  </div>
-                </div>
-                <div className="text-xl md:text-3xl font-bold" style={{ color: chartColor }}>
-                  {retentionRate(buttonsPressedDataObj) === "No Data" 
-                    ? "N/A" 
-                    : (parseFloat(retentionRate(buttonsPressedDataObj)) * 100).toFixed(0) + "%"}
-                </div>
-                {/* Easter Egg: Perfect Score */}
-                {retentionRate(buttonsPressedDataObj) !== "No Data" && 
-                 parseFloat(retentionRate(buttonsPressedDataObj)) === 1.0 && (
-                  <div className="text-xs mt-2 font-semibold animate-pulse" style={{ color: '#10b981' }}>
-                    🏆 Perfect! You're unstoppable! 🏆
-                  </div>
-                )}
-              </div>
-              <div className="stat-card p-3 md:p-4 border rounded-lg text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-primary)' }}>
-                <div className="text-[10px] md:text-xs uppercase tracking-wide opacity-60 mb-1 md:mb-2">Total Reviews</div>
-                <div className="text-xl md:text-3xl font-bold" style={{ color: chartColor }}>{buttonsPressedTotal.toLocaleString()}</div>
-              </div>
-              <div className="stat-card p-3 md:p-4 border rounded-lg text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-primary)' }}>
-                <div className="text-[10px] md:text-xs uppercase tracking-wide opacity-60 mb-1 md:mb-2">Forgot</div>
-                <div className="text-xl md:text-3xl font-bold" style={{ color: '#ef4444' }}>{(buttonsPressedDataObj.Forgot || 0).toLocaleString()}</div>
-              </div>
-              
+            <div className="metric-grid metric-grid-five mb-6 md:mb-8">
+              <MetricCard
+                label={<span className="inline-flex items-center justify-center gap-1">Retention Rate <span className="opacity-50 hover:opacity-100 cursor-help transition-opacity" title="The percentage of reviews where you successfully recalled the answer (Score > Forgot).&#010;Calculation: (Hard + Good + Easy) / Total Reviews" aria-label="Retention rate calculation help">ⓘ</span></span>}
+                value={retentionRate(buttonsPressedDataObj) === "No Data" ? "N/A" : `${(parseFloat(retentionRate(buttonsPressedDataObj)) * 100).toFixed(0)}%`}
+                supporting={retentionRate(buttonsPressedDataObj) !== "No Data" && parseFloat(retentionRate(buttonsPressedDataObj)) === 1.0 ? <span className="font-semibold" style={{ color: '#10b981' }}>🏆 Perfect! You're unstoppable! 🏆</span> : undefined}
+                accent={chartColor}
+              />
+              <MetricCard label="Total Reviews" value={buttonsPressedTotal.toLocaleString()} accent={chartColor} />
+              <MetricCard label="Forgot" value={(buttonsPressedDataObj.Forgot || 0).toLocaleString()} accent="#ef4444" />
+
               {/* Remembered card with hidden Easter Bunny */}
-              <div 
+              <div
                 className="relative cursor-pointer"
                 style={{ overflow: 'visible' }}
                 onMouseEnter={() => setShowEasterBunny(true)}
                 onMouseLeave={() => setShowEasterBunny(false)}
                 onClick={() => setShowEasterBunny(!showEasterBunny)}
               >
-                {/* Easter Bunny behind the card */}
-                <div 
-                  className="absolute inset-0 flex items-center justify-center pointer-events-none"
-                  style={{
-                    opacity: showEasterBunny ? 1 : 0,
-                    transition: 'opacity 1s ease-in-out',
-                    zIndex: 0,
-                    left: '-10px'
-                  }}
-                >
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ opacity: showEasterBunny ? 1 : 0, transition: 'opacity 1s ease-in-out', zIndex: 0, left: '-10px' }}>
                   <div className="text-6xl animate-bounce">🐰</div>
                 </div>
-                
-                {/* The actual card that slides */}
-                <div 
-                  className="stat-card p-3 md:p-4 border rounded-lg text-center"
-                  style={{ 
-                    borderColor: 'var(--rn-clr-border-primary)', 
-                    backgroundColor: 'var(--rn-clr-background-primary)',
-                    transform: showEasterBunny ? 'translateX(70px)' : 'translateX(0)',
-                    transition: 'transform 1.8s cubic-bezier(0.68, -0.55, 0.265, 1.55)',
-                    position: 'relative',
-                    zIndex: 1
-                  }}
-                >
-                  <div className="text-[10px] md:text-xs uppercase tracking-wide opacity-60 mb-1 md:mb-2">Remembered</div>
-                  <div className="text-xl md:text-3xl font-bold" style={{ color: '#10b981' }}>
-                    {((buttonsPressedDataObj.Hard || 0) + (buttonsPressedDataObj.Good || 0) + (buttonsPressedDataObj.Easy || 0)).toLocaleString()}
-                  </div>
-                  {showEasterBunny && (
-                    <div className="text-[8px] md:text-[10px] mt-1 opacity-70 animate-pulse" style={{ color: '#10b981' }}>
-                      🥕 Peek-a-boo!
-                    </div>
-                  )}
+                <div className="remembered-metric-card-shell" style={{ transform: showEasterBunny ? 'translateX(70px)' : 'translateX(0)' }}>
+                  <MetricCard
+                    label="Remembered"
+                    value={((buttonsPressedDataObj.Hard || 0) + (buttonsPressedDataObj.Good || 0) + (buttonsPressedDataObj.Easy || 0)).toLocaleString()}
+                    supporting={showEasterBunny ? <span style={{ color: '#10b981' }}>🥕 Peek-a-boo!</span> : undefined}
+                    accent="#10b981"
+                  />
                 </div>
               </div>
 
-              {/* Time Spent Card */}
-              <div className="stat-card p-3 md:p-4 border rounded-lg text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-primary)' }}>
-                <div className="text-[10px] md:text-xs uppercase tracking-wide opacity-60 mb-1 md:mb-2 flex items-center justify-center gap-1">
-                  Time Spent
-                  <div 
-                    className="opacity-50 hover:opacity-100 cursor-help transition-opacity"
-                    title="Total time spent reviewing flashcards in the selected time period"
-                  >
-                    <svg 
-                      xmlns="http://www.w3.org/2000/svg" 
-                      width="14" 
-                      height="14" 
-                      viewBox="0 0 24 24" 
-                      fill="none" 
-                      stroke="currentColor" 
-                      strokeWidth="2" 
-                      strokeLinecap="round" 
-                      strokeLinejoin="round"
-                    >
-                      <circle cx="12" cy="12" r="10"></circle>
-                      <line x1="12" y1="16" x2="12" y2="12"></line>
-                      <line x1="12" y1="8" x2="12.01" y2="8"></line>
-                    </svg>
-                  </div>
-                </div>
-                <div className="text-xl md:text-3xl font-bold" style={{ color: '#f59e0b' }}>
-                  {formatTime(timeStatsSummary.totalTimeMs)}
-                </div>
-                {timeStatsSummary.totalTimeMs > 0 && (
-                  <div className="text-[8px] md:text-[10px] mt-1 opacity-70">
-                    {formatTime(timeStatsSummary.averageTimePerReviewDay)}/day studied
-                  </div>
-                )}
-              </div>
+              <MetricCard
+                label={<span className="inline-flex items-center justify-center gap-1">Time Spent <span className="opacity-50 hover:opacity-100 cursor-help transition-opacity" title="Total time spent reviewing flashcards in the selected time period" aria-label="Time spent help">ⓘ</span></span>}
+                value={formatTime(timeStatsSummary.totalTimeMs)}
+                supporting={timeStatsSummary.totalTimeMs > 0 ? `${formatTime(timeStatsSummary.averageTimePerReviewDay)}/day studied` : undefined}
+                accent="#f59e0b"
+              />
             </div>
 
+            <div className="section-divider section-divider-subsection"></div>
             <SectionHeader
               title="Review Behavior"
               description="Button choices, repetition patterns, and retention trends"
@@ -993,6 +907,7 @@ export const Statistics = () => {
               )}
             </div>
 
+            <div className="section-divider section-divider-subsection"></div>
             <SectionHeader
               title="Speed and Efficiency"
               description="Time spent, recall speed, and response-time distribution"
@@ -1063,10 +978,13 @@ export const Statistics = () => {
               </div>
             </div>
 
-            <div className="stat-card statistics-compact-card p-3 md:p-4 border rounded-lg mb-4 md:mb-6 text-center" style={{ borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-secondary)' }}>
-              <div className="text-xs md:text-sm opacity-70 mb-1">Total Due Cards (Next {dueOutlook} Days)</div>
-              <div className="text-2xl md:text-4xl font-bold" style={{ color: chartColor }}>{dueCardsTotal.toLocaleString()}</div>
-            </div>
+            <MetricCard
+              className="mb-4 md:mb-6"
+              label={`Total Due Cards (Next ${dueOutlook} Days)`}
+              value={dueCardsTotal.toLocaleString()}
+              supporting="Upcoming due cards forecast"
+              accent={chartColor}
+            />
 
             <div className="chart-container">
               {chart_column_due(
@@ -1664,15 +1582,13 @@ function chart_retention_by_time_of_day(
 
   return <div>
     {bestBlock && (
-      <div className="stat-card statistics-compact-card p-3 md:p-4 border rounded-lg mb-4 md:mb-6 text-center" style={{borderColor: 'var(--rn-clr-border-primary)', backgroundColor: 'var(--rn-clr-background-secondary)' }}>
-        <div className="text-xs md:text-sm opacity-70 mb-1">🎯 Most Productive Time</div>
-        <div className="text-lg font-bold" style={{ color: '#10b981' }}>
-          {bestBlock.timeBlock}
-        </div>
-        <div className="text-sm opacity-60">
-          {bestBlock.retentionRate.toFixed(1)}% retention rate ({bestBlock.totalReviews} reviews)
-        </div>
-      </div>
+      <MetricCard
+        className="mb-4 md:mb-6"
+        label="🎯 Most Productive Time"
+        value={bestBlock.timeBlock}
+        supporting={`${bestBlock.retentionRate.toFixed(1)}% retention rate (${bestBlock.totalReviews} reviews)`}
+        accent="#10b981"
+      />
     )}
     <Chart
       options={options}
@@ -1807,42 +1723,18 @@ function chart_time_spent(
 
   return <div>
     {/* Summary Statistics */}
-    <div className="stat-card mb-4 md:mb-6 p-3 md:p-4 border rounded-lg" style={{ 
-      borderColor: 'var(--rn-clr-border-primary)', 
-      backgroundColor: 'var(--rn-clr-background-primary)' 
-    }}>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-        <div className="text-center">
-          <div className="text-[10px] md:text-xs uppercase tracking-wide opacity-60 mb-1 md:mb-2">Total Time</div>
-          <div className="text-lg md:text-xl font-bold" style={{ color: '#f59e0b' }}>
-            {formatTime(summary.totalTimeMs, 'hours')}
-          </div>
-        </div>
-        <div className="text-center">
-          <div className="text-[10px] md:text-xs uppercase tracking-wide opacity-60 mb-1 md:mb-2">Avg per Day</div>
-          <div className="text-lg md:text-xl font-bold" style={{ color: '#f59e0b' }}>
-            {formatTime(summary.averageTimePerDay)}
-          </div>
-        </div>
-        <div className="text-center">
-          <div className="text-[10px] md:text-xs uppercase tracking-wide opacity-60 mb-1 md:mb-2">Avg per Study Day</div>
-          <div className="text-lg md:text-xl font-bold" style={{ color: '#f59e0b' }}>
-            {formatTime(summary.averageTimePerReviewDay)}
-          </div>
-        </div>
-        <div className="text-center">
-          <div className="text-[10px] md:text-xs uppercase tracking-wide opacity-60 mb-1 md:mb-2">Avg per Card</div>
-          <div className="text-lg md:text-xl font-bold" style={{ color: '#f59e0b' }}>
-            {formatTime(summary.averageTimePerCard, 'seconds')} 
-            <span className="text-xs opacity-60 ml-1">
-              ({summary.cardsPerMinute.toFixed(1)}/min)
-            </span>
-          </div>
-        </div>
-      </div>
-      <div className="mt-2 md:mt-3 text-[10px] md:text-xs text-center opacity-60">
-        Days studied: {summary.daysWithReviews} of {summary.totalDaysInPeriod} ({summary.percentageDaysStudied.toFixed(1)}%)
-      </div>
+    <div className="metric-grid metric-grid-four mb-4 md:mb-6">
+      <MetricCard label="Total Time" value={formatTime(summary.totalTimeMs, 'hours')} accent="#f59e0b" />
+      <MetricCard label="Avg per Day" value={formatTime(summary.averageTimePerDay)} accent="#f59e0b" />
+      <MetricCard label="Avg per Study Day" value={formatTime(summary.averageTimePerReviewDay)} accent="#f59e0b" />
+      <MetricCard
+        label="Avg per Card"
+        value={<>{formatTime(summary.averageTimePerCard, 'seconds')} <span className="text-xs opacity-60">({summary.cardsPerMinute.toFixed(1)}/min)</span></>}
+        accent="#f59e0b"
+      />
+    </div>
+    <div className="mb-4 md:mb-6 text-[10px] md:text-xs text-center opacity-60">
+      Days studied: {summary.daysWithReviews} of {summary.totalDaysInPeriod} ({summary.percentageDaysStudied.toFixed(1)}%)
     </div>
 
     {/* Chart */}
@@ -1966,31 +1858,19 @@ function chart_recall_speed(
   };
 
   return <div>
-    <div className="response-summary-grid mb-3 md:mb-4">
-      <div className="stat-card response-summary-card">
-        <div className="text-center">
-          <div className="text-[10px] md:text-xs uppercase tracking-wide opacity-60 mb-1 md:mb-2">Response Time</div>
-          <div className="text-lg md:text-xl font-bold" style={{ color: chartColor }}>
-            {formatTime(summary?.averageResponseTimeMs || 0, 'seconds')}/card
-          </div>
-          <div className="text-[10px] md:text-xs opacity-60 mt-1">
-            Latest {summary?.studyDaysIncluded || 0} study day{summary?.studyDaysIncluded === 1 ? '' : 's'}
-          </div>
-        </div>
-      </div>
-      <div className="stat-card response-summary-card">
-        <div className="text-center">
-          <div className="text-[10px] md:text-xs uppercase tracking-wide opacity-60 mb-1 md:mb-2">Trend</div>
-          <div className="text-sm md:text-base font-bold" style={{ color: comparisonColor }}>
-            {comparisonText}
-          </div>
-          {comparison && (
-            <div className="text-[10px] md:text-xs opacity-60 mt-1">
-              Previous: {formatTime(comparison.averageResponseTimeMs, 'seconds')}/card
-            </div>
-          )}
-        </div>
-      </div>
+    <div className="metric-grid metric-grid-two mb-3 md:mb-4">
+      <MetricCard
+        label="Response Time"
+        value={`${formatTime(summary?.averageResponseTimeMs || 0, 'seconds')}/card`}
+        supporting={`Latest ${summary?.studyDaysIncluded || 0} study day${summary?.studyDaysIncluded === 1 ? '' : 's'}`}
+        accent={chartColor}
+      />
+      <MetricCard
+        label="Trend"
+        value={comparisonText}
+        supporting={comparison ? `Previous: ${formatTime(comparison.averageResponseTimeMs, 'seconds')}/card` : undefined}
+        accent={comparisonColor}
+      />
     </div>
     <div className="response-summary-note mb-4 md:mb-6">
       Daily averages and medians use the 5th–95th percentile of response times.

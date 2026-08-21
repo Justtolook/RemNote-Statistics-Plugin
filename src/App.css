@@ -160,6 +160,15 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.metric-grid-four,
+.metric-grid-five {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.metric-grid-two {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .metric-card {
   min-height: 112px;
   display: flex;
@@ -200,23 +209,15 @@
   line-height: 1.4;
 }
 
+.remembered-metric-card-shell {
+  position: relative;
+  z-index: 1;
+  transition: transform 1.8s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
 .statisticsBody .statistics-compact-card {
   min-height: 0;
   padding: 0.75rem 1rem;
-}
-
-.response-summary-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0.75rem;
-}
-
-.response-summary-card {
-  min-height: 0;
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--rn-clr-border-primary);
-  border-radius: 8px;
-  background: var(--rn-clr-background-primary);
 }
 
 .response-summary-note {
@@ -505,12 +506,15 @@
 
 @media (min-width: 768px) {
   .metric-grid { gap: 1rem; }
-  .response-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .metric-grid-two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .metric-grid-four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
 @media (min-width: 1024px) {
   .metric-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
   .metric-grid-three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .metric-grid-two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .metric-grid-five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -519,6 +523,7 @@
   .skeleton-row,
   .smooth-transition,
   .stat-card,
+  .remembered-metric-card-shell,
   .fade-in {
     animation: none;
     transition: none;

@@ -28,7 +28,7 @@ export function SectionHeader({ title, description, icon }: SectionHeaderProps) 
 }
 
 interface MetricCardProps {
-    label: string;
+    label: React.ReactNode;
     value: React.ReactNode;
     supporting?: React.ReactNode;
     accent?: string;

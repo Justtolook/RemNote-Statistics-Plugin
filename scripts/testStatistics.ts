@@ -1,7 +1,9 @@
 import assert from 'assert';
 import {
     addCalendarDays,
+    dateOnlyFromTimestamp,
     filterCardsByRange,
+    formatLocalDateOnly,
     getAnalysisRangeCommit,
     getAvailableDateRange,
     getDateAtIndex,
@@ -25,15 +27,20 @@ const cards = [
 ];
 const cardsWithInvalidReview = [{ repetitionHistory: [{ date: Number.NaN }, { date: day('2024-01-01') }] }];
 
-const bounds = getAvailableDateRange(cards);
+const bounds = getAvailableDateRange(cards, '2024-02-02');
 assert(bounds);
 assert.deepStrictEqual(bounds.days.slice(0, 3), ['2024-01-01', '2024-01-02', '2024-01-03']);
-assert.equal(bounds.days.length, 32);
+assert.equal(bounds.end, '2024-02-02');
+assert.equal(bounds.days.length, 33);
 assert.deepStrictEqual(getMonthMarkers(bounds).map(marker => marker.date), ['2024-01-01', '2024-02-01']);
-assert.equal(getAvailableDateRange(cardsWithInvalidReview)?.start, '2024-01-01');
+assert.equal(getAvailableDateRange(cards)?.end, formatLocalDateOnly(new Date()));
+assert.equal(getAvailableDateRange(cardsWithInvalidReview, new Date(2024, 0, 2, 12))?.start, '2024-01-01');
+assert.equal(getAvailableDateRange(cards, new Date(2024, 0, 1, 12))?.end, '2024-02-01');
+assert.equal(formatLocalDateOnly(new Date(2024, 0, 2, 23, 30)), '2024-01-02');
+assert.equal(dateOnlyFromTimestamp(new Date(2024, 0, 2, 0, 30).getTime()), '2024-01-02');
 
 const normalized = normalizeAnalysisRange({ start: '2023-12-01', end: '2024-03-01' }, bounds);
-assert.deepStrictEqual(normalized, { start: '2024-01-01', end: '2024-02-01' });
+assert.deepStrictEqual(normalized, { start: '2024-01-01', end: '2024-02-02' });
 assert.equal(normalizeAnalysisRange({ start: '2024-02-01', end: '2024-01-01' }, bounds), undefined);
 
 const range = { start: '2024-01-01', end: '2024-01-03' };
