@@ -710,7 +710,7 @@ export const Statistics = () => {
             </div>
           </div>
 
-          <div className="mt-4">
+          <div className="mt-2">
             <DateRangeTimeline
               bounds={availableDateRange}
               range={committedAnalysisRange || availableDateRange}
@@ -1730,7 +1730,7 @@ function chart_time_spent(
 
   return <div>
     {/* Summary Statistics */}
-    <div className="metric-grid metric-grid-four mb-4 md:mb-6">
+    <div className="metric-grid metric-grid-five mb-4 md:mb-6">
       <MetricCard label="Total Time" value={formatTime(summary.totalTimeMs, 'hours')} accent="#f59e0b" />
       <MetricCard label="Avg per Day" value={formatTime(summary.averageTimePerDay)} accent="#f59e0b" />
       <MetricCard label="Avg per Study Day" value={formatTime(summary.averageTimePerReviewDay)} accent="#f59e0b" />
@@ -1739,14 +1739,13 @@ function chart_time_spent(
         value={<>{formatTime(summary.averageTimePerCard, 'seconds')} <span className="text-xs opacity-60">({summary.cardsPerMinute.toFixed(1)}/min)</span></>}
         accent="#f59e0b"
       />
+      <MetricCard
+        label="Days Studied"
+        value={`${summary.daysWithReviews} of ${summary.totalDaysInPeriod}`}
+        supporting={`${summary.percentageDaysStudied.toFixed(1)}% of days in period`}
+        accent="#f59e0b"
+      />
     </div>
-    <MetricCard
-      className="mb-4 md:mb-6"
-      label="Days Studied"
-      value={`${summary.daysWithReviews} of ${summary.totalDaysInPeriod}`}
-      supporting={`${summary.percentageDaysStudied.toFixed(1)}% of days in period`}
-      accent="#f59e0b"
-    />
 
     {/* Chart */}
     <Chart

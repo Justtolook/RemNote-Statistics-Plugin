@@ -282,7 +282,7 @@
 }
 
 .date-timeline {
-  padding: 1rem;
+  padding: 0.5rem 1rem 0.75rem;
   border: 1px solid var(--rn-clr-border-primary);
   border-radius: 8px;
   background: var(--rn-clr-background-primary);
@@ -290,14 +290,14 @@
 
 .date-timeline-track-wrap {
   position: relative;
-  height: 3.5rem;
-  margin: 0.75rem 0 0;
+  height: 3.25rem;
+  margin: 0;
 }
 
 .date-timeline-track,
 .date-timeline-selected {
   position: absolute;
-  top: 1.35rem;
+  top: 1.1rem;
   right: 0;
   left: 0;
   height: 0.35rem;
@@ -314,7 +314,7 @@
 
 .date-timeline-marker {
   position: absolute;
-  top: 1rem;
+  top: 0.75rem;
   width: 1px;
   height: 1.1rem;
   background: var(--rn-clr-content-secondary);
@@ -323,7 +323,7 @@
 
 .date-timeline-marker span {
   position: absolute;
-  top: 1.3rem;
+  top: 1.1rem;
   left: 0.25rem;
   color: var(--rn-clr-content-secondary);
   font-size: 10px;
@@ -354,9 +354,13 @@
   text-align: left;
 }
 
+.date-timeline-marker-sparse span {
+  display: none;
+}
+
 .date-timeline-input {
   position: absolute;
-  top: 0.5rem;
+  top: 0.25rem;
   left: 0;
   width: 100%;
   height: 2.25rem;

@@ -175,6 +175,7 @@ export function DateRangeTimeline({ bounds, range, onDraftChange, onCommit, disa
     const startPercent = max === 0 ? 0 : (startIndex / max) * 100;
     const endPercent = max === 0 ? 100 : (endIndex / max) * 100;
     const markers = getMonthMarkers(bounds);
+    const markerStride = markers.length > 24 ? 3 : markers.length > 12 ? 2 : 1;
     const updateDraftRange = (handle: 'start' | 'end', value: number) => {
         const currentRange = draftRangeRef.current;
         if (!currentRange) return;
@@ -230,8 +231,10 @@ export function DateRangeTimeline({ bounds, range, onDraftChange, onCommit, disa
                         ? 'date-timeline-marker-label-first'
                         : index === markers.length - 1
                             ? 'date-timeline-marker-label-last'
-                            : index % 2 === 1
+                            : markerStride === 1 && index % 2 === 1
                                 ? 'date-timeline-marker-alternate'
+                                : markerStride > 1 && index % markerStride !== 0
+                                    ? 'date-timeline-marker-sparse'
                                 : '';
                     return (
                         <div className={`date-timeline-marker ${markerPosition} ${markerVisibility}`} style={{ left: `${left}%` }} key={marker.date}>
