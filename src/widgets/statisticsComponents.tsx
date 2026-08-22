@@ -143,11 +143,12 @@ export function ErrorState({ onRetry }: { onRetry: () => void }) {
 interface DateRangeTimelineProps {
     bounds?: AvailableDateRange;
     range?: AnalysisRange;
+    onDraftChange?: (range: AnalysisRange) => void;
     onCommit: (range: AnalysisRange) => void;
     disabled?: boolean;
 }
 
-export function DateRangeTimeline({ bounds, range, onCommit, disabled = false }: DateRangeTimelineProps) {
+export function DateRangeTimeline({ bounds, range, onDraftChange, onCommit, disabled = false }: DateRangeTimelineProps) {
     const [activeHandle, setActiveHandle] = React.useState<'start' | 'end'>('end');
     const [draftRange, setDraftRange] = React.useState<AnalysisRange | undefined>(range);
     const draftRangeRef = React.useRef<AnalysisRange | undefined>(range);
@@ -161,6 +162,7 @@ export function DateRangeTimeline({ bounds, range, onCommit, disabled = false }:
         pointerInteractionRef.current = false;
         keyboardInteractionRef.current = false;
         setDraftRange(range);
+        if (range) onDraftChange?.(range);
     }, [bounds?.days.length, bounds?.end, bounds?.start, range?.end, range?.start]);
 
     if (!bounds || !draftRange || bounds.days.length === 0) {
@@ -180,6 +182,9 @@ export function DateRangeTimeline({ bounds, range, onCommit, disabled = false }:
         const nextRange = updateAnalysisRange(currentRange, bounds, handle, value);
         draftRangeRef.current = nextRange;
         setDraftRange(nextRange);
+        if (nextRange.start !== currentRange.start || nextRange.end !== currentRange.end) {
+            onDraftChange?.(nextRange);
+        }
     };
 
     const commitDraftRange = () => {
@@ -202,6 +207,7 @@ export function DateRangeTimeline({ bounds, range, onCommit, disabled = false }:
         keyboardInteractionRef.current = false;
         draftRangeRef.current = committedRangeRef.current;
         setDraftRange(committedRangeRef.current);
+        if (committedRangeRef.current) onDraftChange?.(committedRangeRef.current);
     };
 
     const isRangeKeyboardEvent = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -210,10 +216,6 @@ export function DateRangeTimeline({ bounds, range, onCommit, disabled = false }:
 
     return (
         <div className="date-timeline" aria-label={`Selected dates: ${getDateRangeLabel(draftRange)}`}>
-            <div className="date-timeline-labels">
-                <span>Start: <strong>{draftRange.start}</strong></span>
-                <span>End: <strong>{draftRange.end}</strong></span>
-            </div>
             <div className="date-timeline-track-wrap">
                 <div className="date-timeline-track" />
                 <div className="date-timeline-selected" style={{ left: `${startPercent}%`, right: `${100 - endPercent}%` }} />
@@ -224,8 +226,15 @@ export function DateRangeTimeline({ bounds, range, onCommit, disabled = false }:
                         : marker.index === max
                             ? 'date-timeline-marker-last'
                             : 'date-timeline-marker-middle';
+                    const markerVisibility = index === 0
+                        ? 'date-timeline-marker-label-first'
+                        : index === markers.length - 1
+                            ? 'date-timeline-marker-label-last'
+                            : index % 2 === 1
+                                ? 'date-timeline-marker-alternate'
+                                : '';
                     return (
-                        <div className={`date-timeline-marker ${markerPosition}`} style={{ left: `${left}%` }} key={marker.date}>
+                        <div className={`date-timeline-marker ${markerPosition} ${markerVisibility}`} style={{ left: `${left}%` }} key={marker.date}>
                             <span>{marker.label}</span>
                         </div>
                     );
@@ -301,7 +310,6 @@ export function DateRangeTimeline({ bounds, range, onCommit, disabled = false }:
                     onBlur={commitDraftRange}
                 />
             </div>
-            <div className="date-timeline-range-label">{getDateRangeLabel(draftRange)}</div>
         </div>
     );
 }

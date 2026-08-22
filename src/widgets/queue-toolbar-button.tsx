@@ -81,21 +81,6 @@ export const QueueToolbarButton = () => {
         <line x1="6" y1="20" x2="6" y2="14"></line>
       </svg>
       <span>Statistics</span>
-      <span
-        style={{
-          fontSize: '0.625rem',
-          fontWeight: '700',
-          color: 'white',
-          backgroundColor: '#ef4444',
-          padding: '0.125rem 0.25rem',
-          borderRadius: '3px',
-          letterSpacing: '0.025em',
-          textTransform: 'uppercase',
-          lineHeight: '1'
-        }}
-      >
-        NEW
-      </span>
     </button>
   );
 };

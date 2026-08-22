@@ -288,41 +288,6 @@
   background: var(--rn-clr-background-primary);
 }
 
-.date-timeline-labels,
-.date-timeline-range-label {
-  display: flex;
-  justify-content: space-between;
-  color: var(--rn-clr-content-secondary);
-  font-size: 12px;
-}
-
-.date-timeline-labels {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 1rem;
-}
-
-.date-timeline-labels > span {
-  min-width: 0;
-  overflow-wrap: normal;
-  white-space: nowrap;
-}
-
-.date-timeline-labels > span:last-child {
-  text-align: right;
-}
-
-.date-timeline-labels strong,
-.date-timeline-range-label {
-  color: var(--rn-clr-content-primary);
-}
-
-.date-timeline-range-label {
-  justify-content: center;
-  margin-top: 0.75rem;
-  font-weight: 600;
-}
-
 .date-timeline-track-wrap {
   position: relative;
   height: 3.5rem;
@@ -513,6 +478,7 @@
 @media (min-width: 1024px) {
   .metric-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
   .metric-grid-three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .metric-grid-four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .metric-grid-two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .metric-grid-five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 }
@@ -538,8 +504,14 @@
   }
 }
 
-@media (max-width: 640px) {
-  .date-timeline-marker-middle span {
+@media (max-width: 767px) {
+  .date-timeline-marker-alternate span {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .date-timeline-marker:not(.date-timeline-marker-label-first):not(.date-timeline-marker-label-last) span {
     display: none;
   }
 }

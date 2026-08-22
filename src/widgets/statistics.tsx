@@ -466,6 +466,12 @@ export const Statistics = () => {
     }
   };
 
+  const handleDraftDateRangeChange = React.useCallback((draftRange: AnalysisRange) => {
+    setDateStart(draftRange.start);
+    setDateEnd(draftRange.end);
+    setRangeMode('All');
+  }, []);
+
   
 
   return (
@@ -708,6 +714,7 @@ export const Statistics = () => {
             <DateRangeTimeline
               bounds={availableDateRange}
               range={committedAnalysisRange || availableDateRange}
+              onDraftChange={handleDraftDateRangeChange}
               onCommit={(nextRange) => commitDateRange(nextRange.start, nextRange.end, 'All')}
               disabled={!availableDateRange}
             />
@@ -1733,9 +1740,13 @@ function chart_time_spent(
         accent="#f59e0b"
       />
     </div>
-    <div className="mb-4 md:mb-6 text-[10px] md:text-xs text-center opacity-60">
-      Days studied: {summary.daysWithReviews} of {summary.totalDaysInPeriod} ({summary.percentageDaysStudied.toFixed(1)}%)
-    </div>
+    <MetricCard
+      className="mb-4 md:mb-6"
+      label="Days Studied"
+      value={`${summary.daysWithReviews} of ${summary.totalDaysInPeriod}`}
+      supporting={`${summary.percentageDaysStudied.toFixed(1)}% of days in period`}
+      accent="#f59e0b"
+    />
 
     {/* Chart */}
     <Chart
