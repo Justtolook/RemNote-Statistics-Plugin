@@ -1,5 +1,5 @@
 import assert from 'assert';
-import type { Card } from '@remnote/plugin-sdk';
+import type { Card, PluginRem } from '@remnote/plugin-sdk';
 import {
     addCalendarDays,
     dateOnlyFromTimestamp,
@@ -24,6 +24,11 @@ import {
     getRetentionRateOverTime,
     getTimeSpentPerDay,
 } from '../src/lib/dataProcessing';
+import {
+    AnalysisDatasetLoaders,
+    resolveAnalysisDataset,
+} from '../src/widgets/statistics/data/analysisDataset';
+import { getComprehensiveContextRems } from '../src/lib/utils';
 import {
     emptySection,
     errorSection,
@@ -378,4 +383,139 @@ assert.equal(getCollectionSectionState([]).status, 'empty');
 assert.equal(getCollectionSectionState(['loaded']).status, 'ready');
 assert.equal(getCollectionSectionState(undefined, 'failed').status, 'error');
 
+const makeRem = (id: string, methods: Record<string, unknown> = {}) => ({
+    _id: id,
+    ...methods,
+}) as unknown as PluginRem;
+
+const makeCard = (id: string, remId: string) => ({
+    _id: id,
+    remId,
+}) as unknown as Card;
+
+async function runAnalysisDatasetChecks() {
+    const contextRem = makeRem('context');
+    const emptyLoaders: AnalysisDatasetLoaders = {
+        getAllCards: async () => [],
+        getDescendants: async () => [],
+        getComprehensiveContextRems: async () => [],
+        getCards: async () => [],
+    };
+
+    assert.deepStrictEqual(
+        await resolveAnalysisDataset({ contextMode: 'Global', scopeMode: 'descendants' }, emptyLoaders),
+        {},
+    );
+    const globalCards = [makeCard('global-card', 'global-rem')];
+    const global = await resolveAnalysisDataset({
+        contextMode: 'Global',
+        scopeMode: 'descendants',
+        globalCards,
+    }, emptyLoaders);
+    assert.deepStrictEqual(global.dataset?.cards, globalCards);
+    assert.equal(global.dataset?.contextMode, 'Global');
+    assert.equal(global.dataset?.contextRemId, undefined);
+    assert.deepStrictEqual(
+        await resolveAnalysisDataset({ contextMode: 'Current', scopeMode: 'descendants' }, emptyLoaders),
+        {},
+    );
+    const emptyCurrent = await resolveAnalysisDataset({
+        contextMode: 'Current',
+        scopeMode: 'descendants',
+        contextRem,
+    }, emptyLoaders);
+    assert.deepStrictEqual(emptyCurrent.dataset?.cards, []);
+
+    const descendantRems = [makeRem('descendant-1'), makeRem('descendant-2')];
+    let descendantFetches = 0;
+    const descendants = await resolveAnalysisDataset({
+        contextMode: 'Current',
+        scopeMode: 'descendants',
+        contextRem,
+    }, {
+        ...emptyLoaders,
+        getDescendants: async () => descendantRems,
+        getCards: async rem => {
+            descendantFetches += 1;
+            return [makeCard(`${rem._id}-card`, rem._id)];
+        },
+    });
+    assert.equal(descendantFetches, 3);
+    assert.deepStrictEqual(
+        descendants.dataset?.cards.map(card => card._id).sort(),
+        ['context-card', 'descendant-1-card', 'descendant-2-card'],
+    );
+
+    const sourceRem = makeRem('source');
+    const comprehensiveContext = makeRem('context', {
+        getDescendants: async () => [descendantRems[0]],
+        allRemInDocumentOrPortal: async () => [descendantRems[0], sourceRem],
+        allRemInFolderQueue: async () => [sourceRem],
+        getSources: async () => [],
+        remsReferencingThis: async () => [descendantRems[0]],
+    });
+    let comprehensiveFetches = 0;
+    const comprehensive = await resolveAnalysisDataset({
+        contextMode: 'Current',
+        scopeMode: 'comprehensive',
+        contextRem: comprehensiveContext,
+    }, {
+        ...emptyLoaders,
+        getComprehensiveContextRems,
+        getCards: async rem => {
+            comprehensiveFetches += 1;
+            return [makeCard(`${rem._id}-card`, rem._id)];
+        },
+    });
+    assert.equal(comprehensiveFetches, 3);
+    assert.deepStrictEqual(
+        comprehensive.dataset?.cards.map(card => card.remId).sort(),
+        ['context', 'descendant-1', 'source'],
+    );
+
+    const largeRems = Array.from({ length: 201 }, (_, index) => makeRem(`large-${index}`));
+    let bulkFetches = 0;
+    let iterativeFetches = 0;
+    const largeScope = await resolveAnalysisDataset({
+        contextMode: 'Current',
+        scopeMode: 'comprehensive',
+        contextRem,
+    }, {
+        ...emptyLoaders,
+        getComprehensiveContextRems: async () => largeRems,
+        getAllCards: async () => {
+            bulkFetches += 1;
+            return [
+                makeCard('scoped-card', 'large-200'),
+                makeCard('outside-card', 'outside'),
+            ];
+        },
+        getCards: async () => {
+            iterativeFetches += 1;
+            return [];
+        },
+    });
+    assert.deepStrictEqual(largeScope.dataset?.cards.map(card => card._id), ['scoped-card']);
+    assert.equal(iterativeFetches, 0);
+    assert.equal(bulkFetches, 1);
+
+    const rejected = await resolveAnalysisDataset({
+        contextMode: 'Current',
+        scopeMode: 'descendants',
+        contextRem,
+    }, {
+        ...emptyLoaders,
+        getDescendants: async () => [contextRem],
+        getCards: async () => { throw new Error('fixture failure'); },
+    });
+    assert.deepStrictEqual(rejected.dataset?.cards, []);
+    assert.equal(rejected.error, 'The selected Rem scope could not be loaded.');
+}
+
 console.log('statistics pure-function checks passed');
+runAnalysisDatasetChecks()
+    .then(() => console.log('analysis dataset checks passed'))
+    .catch(error => {
+        console.error(error);
+        process.exitCode = 1;
+    });

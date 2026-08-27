@@ -1,4 +1,4 @@
-import { usePlugin, renderWidget, useTrackerPlugin, Card, useRunAsync, PluginRem } from '@remnote/plugin-sdk';
+import { usePlugin, renderWidget, useTrackerPlugin, Card, useRunAsync } from '@remnote/plugin-sdk';
 import Chart from 'react-apexcharts';
 import React from 'react';
 import { getComprehensiveContextRems } from '../lib/utils';
@@ -60,6 +60,10 @@ import {
   getResponseTimeDistribution,
   ResponseTimeDistribution
 } from '../lib/dataProcessing';
+import {
+  createAnalysisDataset,
+  resolveAnalysisDataset,
+} from './statistics/data/analysisDataset';
 
 type RangeMode = 'Today' | 'Yesterday' | 'Week' | 'This Week' | 'Last Week' | 'Month' | 'This Month' | 'Last Month' | 'Year' | 'This Year' | 'Last Year' | 'All';
 
@@ -169,6 +173,10 @@ export const Statistics = () => {
 
   // -- Global Data --
   const allGlobalCards = useTrackerPlugin(async (reactivePlugin) => await reactivePlugin.card.getAll());
+  const globalDataset = React.useMemo(() => {
+    if (allGlobalCards === undefined) return undefined;
+    return createAnalysisDataset({ contextMode: 'Global', scopeMode }, allGlobalCards);
+  }, [allGlobalCards, scopeMode]);
 
   // -- Context Fetching --
   const sessionContext = useTrackerPlugin(async (reactivePlugin) => {
@@ -190,58 +198,25 @@ export const Statistics = () => {
   }, [contextRem]);
   
   // -- Context Data Fetch --
-  const allCardsInContext = useRunAsync(async () => {
-    if (!contextRem) {
-      console.log("Stats Plugin: Context Rem not ready yet.");
-      return undefined;
-    }
-
-    try {
-      let allRems: PluginRem[] = [];
-
-    if (scopeMode === 'descendants') {
-        console.log(`Stats Plugin: Fetching simple descendants for ${contextRem._id}...`);
-        const descendants = await contextRem.getDescendants();
-        allRems = [contextRem, ...descendants];
-    } else {
-        console.log(`Stats Plugin: Fetching comprehensive context for ${contextRem._id}...`);
-        allRems = await getComprehensiveContextRems(contextRem);
-    }
-    
-    const resultCards: Card[] = [];
-    const BATCH_THRESHOLD = 200;
-
-    if (allRems.length > BATCH_THRESHOLD) {
-        console.log(`Stats Plugin: Scope too large (${allRems.length} Rems). Switching to bulk fetch.`);
-        const allSystemCards = await plugin.card.getAll();
-        const scopeRemIds = new Set(allRems.map(r => r._id));
-        const filtered = allSystemCards.filter(c => scopeRemIds.has(c.remId));
-        resultCards.push(...filtered);
-    } else {
-        console.log(`Stats Plugin: Small scope (${allRems.length} Rems). Using iterative fetching.`);
-        await Promise.all(allRems.map(async (rem) => {
-          const cards = await rem.getCards();
-          if (cards && cards.length > 0) {
-            resultCards.push(...cards);
-          }
-        }));
-    }
-
-      console.log(`Stats Plugin: Found ${resultCards.length} total cards in context (Mode: ${scopeMode}).`);
-      setScopeError(undefined);
-      return resultCards;
-    } catch (error) {
-      console.error('Stats Plugin: Error loading context data:', error);
-      setScopeError('The selected Rem scope could not be loaded.');
-      return [];
-    }
+  const currentDatasetResolution = useRunAsync(async () => {
+    return await resolveAnalysisDataset({
+      contextMode: 'Current',
+      scopeMode,
+      contextRem,
+    }, {
+      getAllCards: async () => await plugin.card.getAll(),
+      getDescendants: async rem => await rem.getDescendants(),
+      getComprehensiveContextRems,
+      getCards: async rem => await rem.getCards(),
+    });
   }, [contextRem, scopeMode, scopeRetry]);
 
   React.useEffect(() => {
-    setScopeError(undefined);
-  }, [contextMode, contextRemId, scopeMode]);
+    setScopeError(contextMode === 'Current' ? currentDatasetResolution?.error : undefined);
+  }, [contextMode, contextRemId, scopeMode, currentDatasetResolution]);
 
-  const activeCardsSource = contextMode === 'Global' ? allGlobalCards : allCardsInContext;
+  const activeDataset = contextMode === 'Global' ? globalDataset : currentDatasetResolution?.dataset;
+  const activeCardsSource = activeDataset?.cards;
   const todayDateOnly = formatLocalDateOnly(new Date());
   const availableDateRange = React.useMemo(() => {
     return getAvailableDateRange((activeCardsSource || []) as Array<{ repetitionHistory?: Array<{ date: number }> | null }>, todayDateOnly);
