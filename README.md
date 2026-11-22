@@ -52,6 +52,12 @@ Two powerful modes to analyze your data:
 - Fully responsive design that works on desktop, tablet, and mobile devices
 - Native dark/light mode support using RemNote's theme
 
+### ☕ Live Session Fatigue
+- While reviewing, a small indicator in the queue shows how long your current session has been running and how tired you likely are
+- It compares the session with your personal history: your usual break point, your usual recall rate and your usual answer speed
+- When your recall drops or you slow down past your break point, it suggests a short break (snooze for 10 minutes with ×)
+- Hover the indicator for details; turn it off in the plugin settings
+
 ### ⚡ Quick Access
 - **Queue Toolbar Button**: Access statistics directly from the flashcard review interface
 - **Slash Command**: Type `/statistics` from anywhere in RemNote
@@ -129,6 +135,7 @@ The dashboard is organized into seven sections:
 5. Set your **target retention** (default 90%)
 6. Set the **maximum answer time** counted towards time spent (default 60 seconds, 0 to disable)
 7. Set the **leech threshold**: how many lapses in the period flag a card as a leech (default 8)
+8. Turn the **session fatigue indicator** in the queue on or off
 
 **To close the dashboard:**
 - Press `ESC`
@@ -153,6 +160,7 @@ The dashboard is organized into seven sections:
 
 ## 📋 What's New in 1.7.0
 
+- **Live session fatigue in the queue**: see how tired you are while reviewing, and get a break suggestion at the right time
 - **Your forgetting curve**: recall by time since the last review, against your target
 - **Session fatigue**: when your retention drops during a session, and when to take a break
 - **Young vs. mature retention** compared against your own target retention

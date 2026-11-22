@@ -10,6 +10,7 @@ export const SETTINGS = {
   targetRetention: 'statistics-target-retention',
   maxAnswerSeconds: 'statistics-max-answer-seconds',
   leechThreshold: 'statistics-leech-threshold',
+  liveFatigue: 'statistics-live-fatigue',
 } as const;
 
 export const SETTING_DEFAULTS = {
@@ -20,6 +21,7 @@ export const SETTING_DEFAULTS = {
   targetRetention: 90,
   maxAnswerSeconds: DEFAULT_MAX_RESPONSE_TIME_MS / 1000,
   leechThreshold: DEFAULT_LEECH_THRESHOLD,
+  liveFatigue: true,
 } as const;
 
 /** Parses a numeric setting, falling back when it is missing or outside [min, max]. */

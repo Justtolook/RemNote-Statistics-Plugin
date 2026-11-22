@@ -70,6 +70,13 @@ async function onActivate(plugin: ReactRNPlugin) {
     defaultValue: SETTING_DEFAULTS.leechThreshold,
     description: 'A card that you forget this many times within the selected period is flagged as a leech.',
   });
+
+  await plugin.settings.registerBooleanSetting({
+    id: SETTINGS.liveFatigue,
+    title: 'Show session fatigue in the queue',
+    defaultValue: SETTING_DEFAULTS.liveFatigue,
+    description: 'While reviewing, show how long the current session has been running and suggest a break when your recall or speed drops.',
+  });
 }
 
 async function onDeactivate(_: ReactRNPlugin) {}

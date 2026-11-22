@@ -35,6 +35,15 @@ import {
     getSpacedReviews,
     SpacedReview,
 } from '../src/lib/insights';
+import {
+    appendLiveReview,
+    assessLiveFatigue,
+    buildFatigueProfile,
+    DEFAULT_BREAK_AFTER_MINUTES,
+    getLatestLiveReview,
+    LiveReview,
+    LiveSession,
+} from '../src/lib/liveFatigue';
 
 assert.equal(
     new Date(2026, 9, 24, 12).getTimezoneOffset() !== new Date(2026, 9, 26, 12).getTimezoneOffset(),
@@ -306,6 +315,75 @@ assert.deepStrictEqual(noFatigue.verdict, { kind: 'no-drop', testedUpToMinute: 4
 const split = getFatigueCurve([], [at(4, 1, 10), at(4, 1, 10) + 9 * 60000, at(4, 1, 10) + 20 * 60000]);
 assert.equal(split.sessions.sessions, 2);
 assert.deepStrictEqual(getFatigueCurve([], []).verdict, { kind: 'not-enough-data' });
+
+// --- Live fatigue in the queue -------------------------------------------
+
+// Latest history entry -> live review.
+const answered = getLatestLiveReview('card', { repetitionHistory: [review(at(6, 1), 1), review(at(6, 5, 18), 0, 4200)] });
+assert.deepStrictEqual(answered, { cardId: 'card', date: at(6, 5, 18), recalled: false, spaced: true, responseTime: 4200 });
+assert.equal(getLatestLiveReview('c', { repetitionHistory: [review(at(6, 5, 9), 1), review(at(6, 5, 18), 1)] })?.spaced, false, 'same day: not spaced');
+assert.equal(getLatestLiveReview('c', { repetitionHistory: [review(at(6, 5), 1)] })?.spaced, false, 'first review: not spaced');
+assert.equal(getLatestLiveReview('c', { repetitionHistory: [review(at(6, 5), 1), review(at(6, 6), ReviewScore.SKIP)] }), undefined, 'skip: nothing to record');
+assert.equal(getLatestLiveReview('c', undefined), undefined);
+
+// Sessions: duplicates ignored, a pause over 10 minutes starts a new session.
+const sessionStart = at(7, 1, 18);
+const live = (minute: number, recalled = true, responseTime = 4000, cardId = `c${minute}`): LiveReview =>
+    ({ cardId, date: sessionStart + minute * 60000, recalled, spaced: true, responseTime });
+let liveSession: LiveSession | undefined;
+liveSession = appendLiveReview(liveSession, live(0));
+liveSession = appendLiveReview(liveSession, live(1));
+assert.equal(appendLiveReview(liveSession, live(1)), liveSession, 'the same answer twice is recorded once');
+assert.equal(appendLiveReview(liveSession, live(12)).reviews.length, 1, 'an 11-minute pause starts a new session');
+
+// No session, or the last answer more than 10 minutes ago: inactive.
+assert.equal(assessLiveFatigue(undefined, sessionStart).active, false);
+assert.equal(assessLiveFatigue(liveSession, sessionStart + 12 * 60000).active, false);
+
+// A fresh session: low, general 30-minute guideline without a profile.
+const fresh = assessLiveFatigue(liveSession, sessionStart + 2 * 60000);
+assert.deepStrictEqual([fresh.level, fresh.breakAfterMinutes, fresh.personalBreakPoint, fresh.reviews], ['low', DEFAULT_BREAK_AFTER_MINUTES, false, 2]);
+
+// Personal profile: break after 20 min, usually 90% recall at 4s.
+const profile = { computedAt: sessionStart, breakAfterMinutes: 20, noDropFound: false, baselineRate: 90, baselineMedianMs: 4000 };
+const steady: LiveSession = { reviews: Array.from({ length: 40 }, (_, i) => live(i * 0.5, i % 10 !== 0)) };
+const steadyEarly = assessLiveFatigue(steady, sessionStart + 19.5 * 60000, profile);
+assert.equal(steadyEarly.level, 'low');
+assert.equal(steadyEarly.signals.retention?.dropped, false);
+assert.equal(steadyEarly.signals.speed?.slowed, false);
+// Past the personal break point, performance still fine: medium.
+const steadyLate = assessLiveFatigue(steady, sessionStart + 21 * 60000, profile);
+assert.deepStrictEqual([steadyLate.level, steadyLate.signals.time], ['medium', true]);
+// 1.5x the break point: high even without other signals.
+const steadyLong: LiveSession = { reviews: Array.from({ length: 60 }, (_, i) => live(i * 0.5, i % 10 !== 0)) };
+assert.equal(assessLiveFatigue(steadyLong, sessionStart + 30 * 60000, profile).level, 'high');
+
+// Recall drops and answers slow down in the last 15 answers: high before the break point.
+const tired: LiveSession = { reviews: [
+    ...Array.from({ length: 20 }, (_, i) => live(i * 0.5, i % 10 !== 0)),
+    ...Array.from({ length: 15 }, (_, i) => live(10 + i * 0.5, i % 3 !== 0, 6000)),
+] };
+const tiredNow = assessLiveFatigue(tired, sessionStart + 17.5 * 60000, profile);
+assert.deepStrictEqual(tiredNow.signals.retention, { recentRate: 66.7, baselineRate: 90, dropped: true });
+assert.deepStrictEqual(tiredNow.signals.speed, { recentMedianMs: 6000, baselineMedianMs: 4000, slowdownPercent: 50, slowed: true });
+assert.equal(tiredNow.level, 'high');
+assert.equal(tiredNow.score, Math.min(100, Math.round((17.5 / 20) * 70 + 30)));
+
+// Too few spaced answers: no retention signal.
+const notSpaced: LiveSession = { reviews: tired.reviews.map(r => ({ ...r, spaced: false })) };
+assert.equal(assessLiveFatigue(notSpaced, sessionStart + 17.5 * 60000, profile).signals.retention, undefined);
+
+// A history with no drop doubles the general guideline.
+assert.equal(assessLiveFatigue(steady, sessionStart + 20 * 60000, { computedAt: 0, noDropFound: true, baselineRate: 90 }).breakAfterMinutes, 60);
+
+// Profile from history: the fatigue sessions above (drop after 25 minutes).
+// One card per answer, each with an earlier review two days before, so every answer is spaced.
+const historyCards = tiredSessions.reviews.map(r => ({ repetitionHistory: [
+    { date: r.date - 2 * 86400000, score: 1 },
+    { date: r.date, score: r.recalled ? 1 : 0, responseTime: r.responseTime },
+] }));
+const built = buildFatigueProfile(historyCards, at(3, 20));
+assert.deepStrictEqual([built.breakAfterMinutes, built.noDropFound, built.baselineRate, built.baselineMedianMs], [25, false, 90, 4000]);
 
 // --- Breakdown ------------------------------------------------------------
 

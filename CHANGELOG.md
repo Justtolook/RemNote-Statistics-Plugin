@@ -6,6 +6,7 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- **Live session fatigue in the queue**: next to the Statistics button, a small indicator shows how long the current study session has been running and how tired you likely are (time against your personal break point, recent recall against your usual recall, answer speed against your usual speed). When it is time, it suggests a short break, which can be snoozed for 10 minutes. Can be turned off in the settings.
 - **Your forgetting curve**: recall rate by days since the previous review (1 day, 2–3, 4–7, … 241+), compared with your target retention, with a plain-language verdict on the interval where you fall clearly below target.
 - **Session fatigue**: reviews are grouped into study sessions (a pause over 10 minutes starts a new one); retention and median answer time are shown by minutes into the session, with a recommended break point when retention drops noticeably.
 - **Young vs. mature retention**: retention split by interval (young: 1–20 days, mature: 21+ days), excluding first reviews and same-day relearning, compared against a configurable target retention.
