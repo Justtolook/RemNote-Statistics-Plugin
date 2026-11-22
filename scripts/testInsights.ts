@@ -28,6 +28,13 @@ import { getPresetRange } from '../src/lib/presetRanges';
 import { formatLocalDateOnly } from '../src/lib/dateRange';
 import { ReviewScore } from '../src/lib/reviewScores';
 import { readNumberSetting } from '../src/lib/settings';
+import {
+    getFatigueCurve,
+    getForgettingCurve,
+    getGradedReviewDates,
+    getSpacedReviews,
+    SpacedReview,
+} from '../src/lib/insights';
 
 assert.equal(
     new Date(2026, 9, 24, 12).getTimezoneOffset() !== new Date(2026, 9, 26, 12).getTimezoneOffset(),
@@ -205,6 +212,100 @@ assert.equal(readNumberSetting(undefined, 90, 1, 100), 90);
 assert.equal(readNumberSetting('85', 90, 1, 100), 85);
 assert.equal(readNumberSetting(150, 90, 1, 100), 90);
 assert.equal(readNumberSetting(0, 60, 0, 600), 0);
+
+// --- Spaced reviews ---------------------------------------------------------
+
+const spaced = getSpacedReviews(asCards([{
+    _id: 'sp',
+    remId: 'r',
+    repetitionHistory: [
+        review(at(2, 20), ReviewScore.GOOD), // out of order on purpose: interval 18 from 2 Feb
+        review(at(1, 31, 9), ReviewScore.GOOD), // first review: not spaced
+        review(at(1, 31, 18), ReviewScore.FORGOT), // same day: not spaced
+        review(at(2, 2), ReviewScore.FORGOT, 7000), // interval 2
+        review(at(2, 3), ReviewScore.SKIP), // not a review
+    ],
+}]));
+assert.deepStrictEqual(spaced.map(r => [r.intervalDays, r.recalled, r.responseTime]), [[2, false, 7000], [18, true, undefined]]);
+assert.equal(getSpacedReviews(asCards([{ repetitionHistory: [review(at(1, 1), 1), review(at(1, 5), 1)] }]), midnight(1, 6)).length, 0);
+assert.equal(getGradedReviewDates(mixedCards).length, 2);
+
+// --- Forgetting curve -----------------------------------------------------
+
+const makeSpaced = (count: number, intervalDays: number, forgetEvery: number): SpacedReview[] =>
+    Array.from({ length: count }, (_, i) => ({ date: at(1, 1) + i, intervalDays, recalled: (i + 1) % forgetEvery !== 0 }));
+const curveReviews = [
+    ...makeSpaced(30, 1, 1000), // 100%
+    ...makeSpaced(30, 5, 15), // 28/30 = 93.3%
+    ...makeSpaced(30, 20, 1000).map((r, i) => ({ ...r, recalled: i >= 9 })), // 21/30 = 70%
+    ...makeSpaced(5, 100, 1000), // too few to judge
+];
+const curve = getForgettingCurve(curveReviews, 90);
+assert.deepStrictEqual(curve.buckets.map(b => b.label), ['1 day', '2–3 days', '4–7 days', '8–14 days', '15–30 days', '31–60 days', '61–120 days']);
+assert.deepStrictEqual(curve.buckets.map(b => b.total), [30, 0, 30, 0, 30, 0, 5]);
+assert.deepStrictEqual(curve.buckets.map(b => b.retentionRate), [100, undefined, 93.3, undefined, 70, undefined, 100]);
+assert.equal(curve.buckets[6].reliable, false);
+assert.equal(curve.verdict.kind, 'below-target');
+if (curve.verdict.kind === 'below-target') {
+    assert.equal(curve.verdict.lastOnTarget?.label, '4–7 days');
+    assert.equal(curve.verdict.firstBelow.label, '15–30 days');
+}
+const aboveCurve = getForgettingCurve(curveReviews.filter(r => r.intervalDays < 10), 90);
+assert.equal(aboveCurve.verdict.kind, 'on-target');
+if (aboveCurve.verdict.kind === 'on-target') {
+    assert.equal(aboveCurve.verdict.longestReliable.label, '4–7 days');
+    assert.equal(aboveCurve.verdict.allAbove, true);
+}
+// 26 of 30 (86.7%) is below a 90% target, but within chance: not a verdict of "below".
+const dipCurve = getForgettingCurve([...makeSpaced(30, 1, 1000).map((r, i) => ({ ...r, recalled: i >= 4 })), ...makeSpaced(30, 5, 1000)], 90);
+assert.deepStrictEqual([dipCurve.verdict.kind, dipCurve.verdict.kind === 'on-target' && dipCurve.verdict.allAbove], ['on-target', false]);
+assert.equal(getForgettingCurve(makeSpaced(5, 3, 1000), 90).verdict.kind, 'not-enough-data');
+assert.deepStrictEqual(getForgettingCurve([], 90), { buckets: [], verdict: { kind: 'not-enough-data' } });
+
+// --- Fatigue curve --------------------------------------------------------
+
+// Ten 40-minute sessions on different days, one review every 30 seconds.
+// Before minute 25 one answer in 10 is wrong (90%); afterwards 3 in 10 (70%) and 50% slower.
+// Errors are spread evenly so every 5-minute bucket has the same rate.
+function makeSessions(dropAt: number | undefined) {
+    const allDates: number[] = [];
+    const reviews: SpacedReview[] = [];
+    for (let day = 0; day < 10; day++) {
+        const sessionStart = at(3, 1 + day, 18);
+        for (let i = 0; i < 80; i++) {
+            const date = sessionStart + i * 30000;
+            const minute = i / 2;
+            const tired = dropAt !== undefined && minute >= dropAt;
+            allDates.push(date);
+            reviews.push({
+                date,
+                intervalDays: 3,
+                recalled: tired ? i % 10 >= 3 : i % 10 !== 0,
+                responseTime: tired ? 6000 : 4000,
+            });
+        }
+    }
+    return { allDates, reviews };
+}
+const tiredSessions = makeSessions(25);
+const fatigue = getFatigueCurve(tiredSessions.reviews, tiredSessions.allDates);
+assert.deepStrictEqual(fatigue.sessions, { sessions: 10, medianDurationMinutes: 39.5, medianReviews: 80 });
+assert.deepStrictEqual(fatigue.buckets.map(b => b.label), ['0–5 min', '5–10 min', '10–15 min', '15–20 min', '20–25 min', '25–30 min', '30–35 min', '35–40 min']);
+assert.deepStrictEqual(fatigue.verdict, {
+    kind: 'drop',
+    afterMinute: 25,
+    baselineRate: 90,
+    droppedRate: 70,
+    slowdownPercent: 50,
+    sessionsLongerShare: 100,
+});
+const freshSessions = makeSessions(undefined);
+const noFatigue = getFatigueCurve(freshSessions.reviews, freshSessions.allDates);
+assert.deepStrictEqual(noFatigue.verdict, { kind: 'no-drop', testedUpToMinute: 40, baselineRate: 90 });
+// A pause of more than 10 minutes starts a new session.
+const split = getFatigueCurve([], [at(4, 1, 10), at(4, 1, 10) + 9 * 60000, at(4, 1, 10) + 20 * 60000]);
+assert.equal(split.sessions.sessions, 2);
+assert.deepStrictEqual(getFatigueCurve([], []).verdict, { kind: 'not-enough-data' });
 
 // --- Breakdown ------------------------------------------------------------
 

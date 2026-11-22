@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- **Your forgetting curve**: recall rate by days since the previous review (1 day, 2–3, 4–7, … 241+), compared with your target retention, with a plain-language verdict on the interval where you fall clearly below target.
+- **Session fatigue**: reviews are grouped into study sessions (a pause over 10 minutes starts a new one); retention and median answer time are shown by minutes into the session, with a recommended break point when retention drops noticeably.
 - **Young vs. mature retention**: retention split by interval (young: 1–20 days, mature: 21+ days), excluding first reviews and same-day relearning, compared against a configurable target retention.
 - **Target retention** setting (default 90%), also drawn as a target line on the retention-over-time chart.
 - **Workload forecast**: "Overdue now", "Due today" and "Next N days" cards with time estimates based on your median answer time over the last 30 days. Overdue cards are shown as a separate stacked bar on today.

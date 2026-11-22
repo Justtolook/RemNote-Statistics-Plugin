@@ -2,6 +2,7 @@ import { Card } from '@remnote/plugin-sdk';
 import React from 'react';
 import { transformObjectToCategoryFormat } from '../../lib/chartHelpers';
 import { eachLocalDay } from '../../lib/calendar';
+import { getFatigueCurve, getForgettingCurve, getGradedReviewDates, getSpacedReviews } from '../../lib/insights';
 import { AnalysisRange, filterCardsByRange } from '../../lib/dateRange';
 import {
   buildDailyReviewBuckets,
@@ -33,6 +34,7 @@ export interface StatisticsDataOptions {
   leechThreshold: number;
   dueOutlookDays: number;
   hardestCardsLimit: number;
+  targetRetention: number;
 }
 
 /**
@@ -47,6 +49,7 @@ export function useStatisticsData({
   leechThreshold,
   dueOutlookDays,
   hardestCardsLimit,
+  targetRetention,
 }: StatisticsDataOptions) {
   const { start, end } = React.useMemo(() => getAnalysisTimestamps(range), [range]);
 
@@ -117,6 +120,17 @@ export function useStatisticsData({
   // Needs full histories to measure intervals that began before the period.
   const maturity = React.useMemo(() => getRetentionByMaturity(cards, start, end), [cards, start, end]);
 
+  // Reviews with a previous review at least a day earlier, with their interval.
+  const spacedReviews = React.useMemo(() => getSpacedReviews(cards, start, end), [cards, start, end]);
+  const forgettingCurve = React.useMemo(
+    () => getForgettingCurve(spacedReviews, targetRetention),
+    [spacedReviews, targetRetention],
+  );
+  const fatigueCurve = React.useMemo(
+    () => getFatigueCurve(spacedReviews, getGradedReviewDates(cards, start, end)),
+    [spacedReviews, cards, start, end],
+  );
+
   const timeOfDay = React.useMemo(() => getRetentionRateByTimeOfDay(filteredCards), [filteredCards]);
 
   const hardestCards = React.useMemo(
@@ -155,6 +169,8 @@ export function useStatisticsData({
     cumulativeReviews,
     retention,
     maturity,
+    forgettingCurve,
+    fatigueCurve,
     timeOfDay,
     hardestCards,
     time,

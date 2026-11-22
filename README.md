@@ -19,6 +19,8 @@ The RemNote Statistics Plugin transforms your flashcard review data into actiona
 
 ### 📈 Comprehensive Analytics Dashboard
 - **Retention Rate Tracking**: Monitor your recall success rate over time with daily, 7-day, 30-day and cumulative trend lines (calendar days, weighted by number of reviews) and your target retention
+- **Your Forgetting Curve**: See how well you recall cards after 1 day, a week, a month and longer, and from which interval you fall below your target retention
+- **Session Fatigue**: Find out after how many minutes of studying your retention drops and your answers slow down, and when to take a break
 - **Young vs. Mature Retention**: See how well you remember young cards (interval under 21 days) and mature cards (21+ days), leaving out first reviews and same-day relearning, compared with your target
 - **Review Heatmap**: GitHub-style heatmap showing your learning activity across days and weeks
 - **Button Distribution Analysis**: Visualize how often you press Skip, Forgot, Hard, Good, or Easy during reviews
@@ -75,7 +77,7 @@ Two powerful modes to analyze your data:
 
 ### Navigating the Dashboard
 
-The dashboard is organized into six sections:
+The dashboard is organized into seven sections:
 
 1. **Controls Section**
    - Choose between Global or Current Rem context
@@ -102,15 +104,19 @@ The dashboard is organized into six sections:
      - Recall Speed Over Time (daily 5th–95th percentile average and median response time, plus a weighted 7-study-day trend)
      - Response Time Distribution (selected-period box plot with outlier counts)
 
-4. **Plan Ahead Section**
+4. **Learning Insights**
+   - Your forgetting curve: recall rate by days since the previous review, against your target
+   - Session fatigue: retention and answer speed by minutes into a session, with a recommended break point
+
+5. **Plan Ahead Section**
    - Select forecast period (Week, Month, Year)
    - Overdue cards, cards due today, and total due cards for the period, each with a time estimate
    - Bar chart showing due cards per day, with today's backlog stacked on top
 
-5. **Cards to Improve**
+6. **Cards to Improve**
    - Cards ranked by how confidently their retention is low, with leech badges
 
-6. **Breakdown**
+7. **Breakdown**
    - Click "Show breakdown" to group statistics by document (Global) or by child Rem (Current Rem)
 
 ### Customizing Your Experience
@@ -147,6 +153,8 @@ The dashboard is organized into six sections:
 
 ## 📋 What's New in 1.7.0
 
+- **Your forgetting curve**: recall by time since the last review, against your target
+- **Session fatigue**: when your retention drops during a session, and when to take a break
 - **Young vs. mature retention** compared against your own target retention
 - **Workload forecast** with your overdue backlog and time estimates per day
 - **Breakdown by document** (or by child Rem) with retention, time, lapses and leeches

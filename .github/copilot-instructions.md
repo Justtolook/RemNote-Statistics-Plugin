@@ -13,6 +13,7 @@ This is a **RemNote plugin** built with the `@remnote/plugin-sdk` that provides 
 - **Data Processing**: src/lib/dataProcessing.ts - Pure functions for statistics; `buildDailyReviewBuckets` is the shared single pass over review history
 - **Review scores**: src/lib/reviewScores.ts - `ReviewScore` constants and `isRecall` / `isForgot` / `isGradedReview`; never compare score literals directly
 - **Calendar**: src/lib/calendar.ts - DST-safe local-day helpers (step days with `setDate`, never `+ 24h`) and locale week start
+- **Learning insights**: src/lib/insights.ts - Forgetting curve and session fatigue from "spaced" reviews (previous review at least a day earlier); verdicts only use buckets with enough reviews and require the 95% interval to clear the threshold
 - **Breakdown**: src/lib/breakdown.ts - Batched parent loading and grouping by document / child Rem
 - **Settings**: src/lib/settings.ts - Setting ids, defaults and parsing
 - **Opening the popup**: src/lib/openStatistics.ts - `openStatisticsPopup()` used by the command and the queue button

@@ -43,6 +43,7 @@ import {
 import { EasterEggBanners, RememberedMetricCard, useLogoEasterEgg } from './statistics/EasterEggs';
 import { HardestCardsSection } from './statistics/HardestCards';
 import { MaturityRetention } from './statistics/MaturityRetention';
+import { LearningInsights } from './statistics/LearningInsights';
 import { DocumentBreakdown } from './statistics/DocumentBreakdown';
 import { SegmentedControl } from './statistics/SegmentedControl';
 import { formatTime, interpolateColor } from '../lib/dataProcessing';
@@ -178,6 +179,7 @@ export const Statistics = () => {
     leechThreshold,
     dueOutlookDays: dueOutlook,
     hardestCardsLimit,
+    targetRetention,
   });
 
   // -- Date controls --
@@ -550,6 +552,16 @@ export const Statistics = () => {
                 </div>
               </div>
             </div>
+
+            <div className="section-divider"></div>
+
+            {/* SECTION 3: LEARNING INSIGHTS */}
+            <LearningInsights
+              forgettingCurve={data.forgettingCurve}
+              fatigueCurve={data.fatigueCurve}
+              targetRetention={targetRetention}
+              accent={accent}
+            />
 
             <div className="section-divider"></div>
 

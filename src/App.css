@@ -619,3 +619,20 @@
   color: var(--rn-clr-link);
   text-decoration: underline;
 }
+
+/* Learning insights */
+.insight-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+.insight-callout {
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  border-left: 4px solid var(--rn-clr-border-primary);
+  border-radius: 6px;
+  background-color: var(--rn-clr-background-secondary);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
