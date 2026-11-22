@@ -519,3 +519,103 @@
     display: none;
   }
 }
+
+/* Queue toolbar button */
+.queue-stats-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.5rem 0.25rem;
+  margin: 0 0.5rem;
+  background-color: var(--rn-clr-background-secondary);
+  border: 1px solid var(--rn-clr-border-primary);
+  border-radius: 6px;
+  color: var(--rn-clr-content-primary);
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.queue-stats-button:hover {
+  background-color: var(--rn-clr-background-tertiary);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.queue-stats-button-mobile {
+  margin: 0 1rem 0.5rem;
+}
+
+/* Leech badge and breakdown table */
+.leech-badge {
+  display: inline-block;
+  margin-left: 0.375rem;
+  padding: 0 0.375rem;
+  border-radius: 9999px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #b45309;
+  background-color: rgba(245, 158, 11, 0.15);
+  vertical-align: middle;
+}
+
+.breakdown-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.breakdown-table th,
+.breakdown-table td {
+  padding: 0.5rem 0.75rem;
+  text-align: right;
+  border-bottom: 1px solid var(--rn-clr-border-primary);
+  white-space: nowrap;
+}
+
+.breakdown-table th:first-child,
+.breakdown-table td:first-child {
+  text-align: left;
+  white-space: normal;
+}
+
+.breakdown-table th {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+  background-color: var(--rn-clr-background-tertiary);
+}
+
+.breakdown-table tbody tr {
+  cursor: pointer;
+}
+
+.breakdown-table tbody tr:hover {
+  background-color: var(--rn-clr-background-tertiary);
+}
+
+.breakdown-table-wrapper {
+  overflow-x: auto;
+  border: 1px solid var(--rn-clr-border-primary);
+  border-radius: 8px;
+}
+
+.hardest-card-row {
+  background-color: var(--rn-clr-background-primary);
+}
+
+.hardest-card-row:hover,
+.hardest-card-row:focus-visible {
+  background-color: var(--rn-clr-background-tertiary);
+}
+
+.hardest-card-row:hover .hardest-card-text {
+  color: var(--rn-clr-link);
+  text-decoration: underline;
+}

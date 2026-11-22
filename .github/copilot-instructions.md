@@ -7,18 +7,23 @@ This is a **RemNote plugin** built with the `@remnote/plugin-sdk` that provides 
 ### Core Components
 
 - **Entry Point**: src/widgets/index.tsx - Plugin registration and command/widget setup using `declareIndexPlugin`
-- **Statistics Dashboard**: src/widgets/statistics.tsx - Unified widget with review analytics, heatmap, and outlook charts using ApexCharts
-- **Chart Helpers**: src/lib/chartHelpers.ts - Shared chart configuration and styling utilities
-- **Data Processing**: src/lib/dataProcessing.ts - Functions for processing card data, calculating statistics, and preparing chart data
+- **Statistics Dashboard**: src/widgets/statistics.tsx - Popup widget: controls (context, period) and section layout
+- **Dashboard modules**: src/widgets/statistics/ - `useStatisticsData` (all derived data, memoised), `charts.tsx` (ApexCharts components taking an `accent` prop), `HardestCards`, `MaturityRetention`, `DocumentBreakdown`, `EasterEggs`, `data/analysisDataset.ts` (scoped card loading)
+- **Chart Helpers**: src/lib/chartHelpers.ts - Shared chart configuration and styling utilities (no global colour state; pass the accent explicitly)
+- **Data Processing**: src/lib/dataProcessing.ts - Pure functions for statistics; `buildDailyReviewBuckets` is the shared single pass over review history
+- **Review scores**: src/lib/reviewScores.ts - `ReviewScore` constants and `isRecall` / `isForgot` / `isGradedReview`; never compare score literals directly
+- **Calendar**: src/lib/calendar.ts - DST-safe local-day helpers (step days with `setDate`, never `+ 24h`) and locale week start
+- **Breakdown**: src/lib/breakdown.ts - Batched parent loading and grouping by document / child Rem
+- **Settings**: src/lib/settings.ts - Setting ids, defaults and parsing
+- **Opening the popup**: src/lib/openStatistics.ts - `openStatisticsPopup()` used by the command and the queue button
 - **Context Utilities**: src/lib/utils.ts - `getComprehensiveContextRems()` for gathering related Rems
 
 ### Widget Architecture Pattern
 
 The widget uses **session storage for context persistence**:
 ```tsx
-// Command saves focused Rem to session
-await plugin.storage.setSession('statistics-context', { focusedRemId: focusedRem?._id });
-plugin.widget.openPopup('statistics');
+// Command and queue button both call this helper
+await openStatisticsPopup(plugin); // saves { focusedRemId } to session storage, then opens the popup
 
 // Widget reads context from session
 const sessionContext = useTrackerPlugin(async (reactivePlugin) => {
@@ -44,6 +49,8 @@ Two modes for gathering cards in context:
 ```bash
 npm run dev           # Start webpack-dev-server with hot reload
 npm run check-types   # Run TypeScript type checking
+npm run lint          # ESLint, including React hooks rules
+npm test              # Pure-function tests (scripts/testStatistics.ts, scripts/testInsights.ts in TZ=Europe/Berlin)
 npm run validate      # Validates README.md exists (required for build)
 npm run build         # Full production build + zip for plugin distribution
 ```
@@ -84,8 +91,8 @@ const setting = useTrackerPlugin(() => plugin.settings.getSetting('setting-id'))
 ## Code Conventions
 
 - **State Management**: React hooks (`useState`, `useRunAsync`) - no external state library
-- **Date Handling**: Native `Date` objects with ISO string formatting (`toISOString().split('T')[0]`)
-- **Range Modes**: Pre-defined time ranges ('Today', 'Week', 'Month', 'Year', 'Last Year', 'All') with date calculation logic
+- **Date Handling**: Local calendar days. Use `formatLocalDateOnly` / `src/lib/calendar.ts`; never derive a local day from `toISOString()` or by adding 24h
+- **Range Modes**: Presets in src/lib/presetRanges.ts (`getPresetRange`), week start from the user's locale
 - **Settings Validation**: Hex color regex `/^#[0-9A-F]{6}$/i` before applying custom colors
 - **Logging**: Console logs prefixed with `"Stats Plugin:"` or `"Heatmap:"` for debugging
 
@@ -94,10 +101,12 @@ const setting = useTrackerPlugin(() => plugin.settings.getSetting('setting-id'))
 1. **Widget Context**: Always save context to session storage before opening popup
 2. **Large Scopes**: Use bulk fetching strategy (>200 Rems) to avoid performance issues
 3. **TypeScript Strictness**: `strict: true` and `strictNullChecks: true` - handle undefined/null explicitly
-4. **Mobile**: Not supported yet (`enableOnMobile: false` in manifest)
+4. **Mobile**: Enabled (`enableOnMobile: true`); the queue button moves below the top bar on phones
 5. **Build Validation**: `npm run build` requires README.md to exist
 6. **Chart Types**: Use proper types for xaxisType ('datetime' | 'category' | 'numeric')
 7. **Shared Code**: Reuse functions from `src/lib/chartHelpers.ts` and `src/lib/dataProcessing.ts`
+8. **Reviews vs. interactions**: Only Forgot/Hard/Good/Easy are reviews. Skips, leech prompts, resets and manual schedule edits must not be counted
+9. **Time**: Cap single answers with `capResponseTime` when summing time spent; keep raw values for speed distributions
 
 ## Plugin Distribution
 

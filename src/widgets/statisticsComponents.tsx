@@ -163,6 +163,9 @@ export function DateRangeTimeline({ bounds, range, onDraftChange, onCommit, disa
         keyboardInteractionRef.current = false;
         setDraftRange(range);
         if (range) onDraftChange?.(range);
+        // Keyed on the primitive values on purpose: `range` and `bounds` are new
+        // objects on every parent render and must not reset an in-progress drag.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [bounds?.days.length, bounds?.end, bounds?.start, range?.end, range?.start]);
 
     if (!bounds || !draftRange || bounds.days.length === 0) {
