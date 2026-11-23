@@ -9,7 +9,7 @@ The RemNote Statistics Plugin transforms your flashcard review data into actiona
 ## ✨ Key Features
 
 ### ⏱️ Time Tracking & Productivity
-- **Time Spent Statistics**: Track total time spent reviewing flashcards
+- **Time Spent Statistics**: Track total time spent reviewing flashcards (very long answers are capped, 60 seconds by default)
 - **Time Spent Chart**: Bar chart showing daily review time in minutes (similar to Anki)
 - **Productivity Metrics**: View average time per day, per study day, and per card
 - **Study Efficiency**: Cards per minute rate and study day percentage
@@ -18,12 +18,16 @@ The RemNote Statistics Plugin transforms your flashcard review data into actiona
 - **Response Time Distribution**: Inspect the selected period's response-time average, quartiles, Tukey whiskers, and unusually fast or slow review counts
 
 ### 📈 Comprehensive Analytics Dashboard
-- **Retention Rate Tracking**: Monitor your recall success rate over time with daily, weekly (7-day moving average), monthly (30-day moving average), and cumulative average trend lines
+- **Retention Rate Tracking**: Monitor your recall success rate over time with daily, 7-day, 30-day and cumulative trend lines (calendar days, weighted by number of reviews) and your target retention
+- **Your Forgetting Curve**: See how well you recall cards after 1 day, a week, a month and longer, and from which interval you fall below your target retention
+- **Session Fatigue**: Find out after how many minutes of studying your retention drops and your answers slow down, and when to take a break
+- **Young vs. Mature Retention**: See how well you remember young cards (interval under 21 days) and mature cards (21+ days), leaving out first reviews and same-day relearning, compared with your target
 - **Review Heatmap**: GitHub-style heatmap showing your learning activity across days and weeks
 - **Button Distribution Analysis**: Visualize how often you press Skip, Forgot, Hard, Good, or Easy during reviews
 - **Card Repetition Statistics**: See the distribution of cards by number of reviews
-- **Future Outlook**: Forecast upcoming due cards for the next 30, 60, or 90 days
-- **Hardest Flashcards**: Identify your most challenging cards ranked by lowest retention rate with direct links to improve them
+- **Workload Forecast**: See your overdue backlog and upcoming due cards for the next week, month or year, with estimated study time based on your own answer speed
+- **Cards to Improve**: Identify the cards you most reliably forget, with leech badges and direct links to improve them
+- **Breakdown by Document**: Compare reviews, retention, time, lapses and leeches across your top-level documents, or across the children of the current Rem
 - **Time of Day Analysis**: Discover your most productive hours with retention rate by time of day in 3-hour blocks
 
 ### 📅 Flexible Time Ranges
@@ -47,6 +51,12 @@ Two powerful modes to analyze your data:
 - Configure heatmap colors (low/high values) and target thresholds
 - Fully responsive design that works on desktop, tablet, and mobile devices
 - Native dark/light mode support using RemNote's theme
+
+### ☕ Live Session Fatigue
+- While reviewing, a small indicator in the queue shows how long your current session has been running and how tired you likely are
+- It compares the session with your personal history: your usual break point, your usual recall rate and your usual answer speed
+- When your recall drops or you slow down past your break point, it suggests a short break (snooze for 10 minutes with ×)
+- Hover the indicator for details; turn it off in the plugin settings
 
 ### ⚡ Quick Access
 - **Queue Toolbar Button**: Access statistics directly from the flashcard review interface
@@ -73,7 +83,7 @@ Two powerful modes to analyze your data:
 
 ### Navigating the Dashboard
 
-The dashboard is organized into four main sections:
+The dashboard is organized into seven sections:
 
 1. **Controls Section**
    - Choose between Global or Current Rem context
@@ -87,7 +97,8 @@ The dashboard is organized into four main sections:
 
 3. **Review Statistics Section**
    - Retention rate card with success percentage
-   - Total reviews count
+   - Total reviews count (skips are not counted)
+   - Young and mature retention compared with your target
    - Time spent card with total time and daily average
    - Button distribution breakdown (Forgot vs. Remembered)
    - Interactive charts:
@@ -99,10 +110,20 @@ The dashboard is organized into four main sections:
      - Recall Speed Over Time (daily 5th–95th percentile average and median response time, plus a weighted 7-study-day trend)
      - Response Time Distribution (selected-period box plot with outlier counts)
 
-4. **Outlook Section**
+4. **Learning Insights**
+   - Your forgetting curve: recall rate by days since the previous review, against your target
+   - Session fatigue: retention and answer speed by minutes into a session, with a recommended break point
+
+5. **Plan Ahead Section**
    - Select forecast period (Week, Month, Year)
-   - View total due cards for the period
-   - Bar chart showing daily due cards distribution
+   - Overdue cards, cards due today, and total due cards for the period, each with a time estimate
+   - Bar chart showing due cards per day, with today's backlog stacked on top
+
+6. **Cards to Improve**
+   - Cards ranked by how confidently their retention is low, with leech badges
+
+7. **Breakdown**
+   - Click "Show breakdown" to group statistics by document (Global) or by child Rem (Current Rem)
 
 ### Customizing Your Experience
 
@@ -111,6 +132,10 @@ The dashboard is organized into four main sections:
 2. Enter a hex color code (e.g., `#3362f0`) for Chart Color
 3. Customize Heatmap colors (low/high values)
 4. Set your target repetition threshold
+5. Set your **target retention** (default 90%)
+6. Set the **maximum answer time** counted towards time spent (default 60 seconds, 0 to disable)
+7. Set the **leech threshold**: how many lapses in the period flag a card as a leech (default 8)
+8. Turn the **session fatigue indicator** in the queue on or off
 
 **To close the dashboard:**
 - Press `ESC`
@@ -122,7 +147,7 @@ The dashboard is organized into four main sections:
 ### For Students
 - **Track Study Consistency**: Use the heatmap to maintain daily learning streaks
 - **Monitor Study Time**: See exactly how much time you spend reviewing with detailed time statistics
-- **Identify Weak Areas**: Use the Hardest Flashcards section to find and improve problematic cards
+- **Identify Weak Areas**: Use the Cards to Improve section and the breakdown by document to find and fix problematic cards
 - **Plan Study Sessions**: Forecast view helps you anticipate heavy review days and the time of day chart helps you schedule reviews when you're most productive
 - **Target Problem Cards**: Click directly on difficult cards to review and improve their content
 - **Optimize Study Schedule**: Review the time of day chart to discover when you have the best retention and schedule important reviews accordingly
@@ -136,7 +161,37 @@ The dashboard is organized into four main sections:
 ## 📋 Changelog
 
 
-### Version 1.6.0 (Current)
+### Version 1.7.0 (Current)
+**New Features:**
+- ☕ **Live Session Fatigue in the Queue**: A small indicator next to the Statistics button shows how long your current session has been running and how tired you likely are (Fresh / Getting tired / Tired)
+  - Compares session time against your personal break point, recent recall against your usual recall, and answer speed against your usual speed
+  - Suggests a short break when it is time; the suggestion can be snoozed for 10 minutes
+  - Can be turned off in the settings ("Show session fatigue in the queue")
+- 📉 **Your Forgetting Curve**: Recall rate by days since the previous review (1 day, 2–3, 4–7, … 241+), compared with your target retention, with a plain-language verdict
+- 😴 **Session Fatigue Analysis**: Retention and median answer time by minutes into a study session, with a recommended break point (a pause over 10 minutes starts a new session)
+- 🌱 **Young vs. Mature Retention**: Retention split into young (1–20 days) and mature (21+ days) cards, compared against your target retention
+- 🎯 **Target Retention** setting (default 90%), also drawn as a target line on the retention-over-time chart
+- 🔮 **Workload Forecast**: "Overdue now", "Due today" and "Next N days" cards with time estimates based on your median answer time
+- 📂 **Breakdown by Document**: Reviews, retention, time, lapses and leeches per top-level document (Global) or per child Rem (Current Rem); click a row to open the Rem
+- 🩸 **Leech Badges**: Cards forgotten 8+ times (configurable) or marked as a leech by RemNote are flagged
+- ⏲️ **Maximum Answer Time** setting (default 60 s): longer answers are capped when adding up time spent
+
+**Bug Fixes:**
+- The due-card forecast no longer shifts by one day after a daylight-saving change, and now includes cards that are already due or overdue
+- The 7d and 30d retention averages now cover calendar days and are weighted by review count
+- Skips, leech prompts, resets and manual schedule edits are no longer counted as reviews
+- "Cards to Improve" now ranks cards by the upper bound of the 95% confidence interval of their retention
+- "Days studied" and the per-day time average no longer count one day too few
+- "This Week" / "Last Week" follow your locale's first day of the week
+- Changing the chart colour in the settings now always re-renders the charts
+
+**Technical Improvements:**
+- Split the dashboard into focused modules (`src/widgets/statistics/`) with all derived data computed in one memoised hook
+- Review scores are named constants (`src/lib/reviewScores.ts`)
+- The "Current Rem" dataset is only loaded while that mode is selected
+- Added ESLint, `npm test`, and a GitHub Actions workflow running type checks, lint, tests and build
+
+### Version 1.6.0
 **New Features:**
 - ⏱️ **Time Spent Reviewing Statistics**: Comprehensive time tracking for flashcard reviews
   - New "Time Spent" metric card in Review Statistics section showing total review time
@@ -212,6 +267,9 @@ The dashboard is organized into four main sections:
 - Future due cards forecast
 - Global and Current Rem context modes
 - Customizable chart colors
+
+
+See the full history in [CHANGELOG.md](https://github.com/Justtolook/RemNote-Statistics-Plugin/blob/main/CHANGELOG.md).
 
 ## 🤝 Contributing
 

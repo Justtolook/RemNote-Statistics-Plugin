@@ -251,6 +251,8 @@ assert.deepStrictEqual(hardest, [
         forgotCount: 2,
         rememberedCount: 1,
         retentionRate: 33.3,
+        retentionUpperBound: 79.2,
+        isLeech: false,
         lastReviewDate: new Date(2024, 0, 3, 12).getTime(),
     },
     {
@@ -260,6 +262,8 @@ assert.deepStrictEqual(hardest, [
         forgotCount: 3,
         rememberedCount: 3,
         retentionRate: 50,
+        retentionUpperBound: 81.2,
+        isLeech: false,
         lastReviewDate: new Date(2024, 0, 6, 12).getTime(),
     },
     {
@@ -269,6 +273,8 @@ assert.deepStrictEqual(hardest, [
         forgotCount: 2,
         rememberedCount: 2,
         retentionRate: 50,
+        retentionUpperBound: 85,
+        isLeech: false,
         lastReviewDate: new Date(2024, 0, 4, 12).getTime(),
     },
 ]);
@@ -300,7 +306,7 @@ const dailyTime = getTimeSpentPerDay(timeCards, heatmapStart, heatmapEnd);
 assert.deepStrictEqual(dailyTime, [
     {
         date: localDay(2024, 1, 1),
-        timeMs: 107000,
+        timeMs: 67000, // the 100s answer is capped at 60s
         reviewCount: 4,
         responseTimesMs: [1000, 2000, 100000, 4000],
     },
@@ -328,6 +334,7 @@ assert.deepStrictEqual(getRecallSpeedPerDay(dailyTime), [
     },
 ]);
 assert.deepStrictEqual(getTimeSpentPerDay(timeCards), dailyTime);
+assert.equal(getTimeSpentPerDay(timeCards, heatmapStart, heatmapEnd, 0)[0].timeMs, 107000, 'cap of 0 disables capping');
 assert.deepStrictEqual(
     getTimeSpentPerDay(timeCards, heatmapStart, localEndOfDay(2024, 1, 1)),
     [dailyTime[0]],
@@ -336,14 +343,14 @@ assert.deepStrictEqual(getRecallSpeedPerDay([
     { date: heatmapStart, timeMs: 0, reviewCount: 0, responseTimesMs: [] },
 ]), []);
 const timeSummary = calculateTimeStatsSummary(dailyTime, heatmapStart, localDay(2024, 1, 3));
-assert.equal(timeSummary.totalTimeMs, 121000);
+assert.equal(timeSummary.totalTimeMs, 81000);
 assert.equal(timeSummary.totalReviews, 7);
 assert.equal(timeSummary.daysWithReviews, 2);
 assert.equal(timeSummary.totalDaysInPeriod, 2);
-assert.equal(timeSummary.averageTimePerDay, 60500);
-assert.equal(timeSummary.averageTimePerReviewDay, 60500);
-assert.equal(timeSummary.averageTimePerCard, 121000 / 7);
-assert.equal(timeSummary.cardsPerMinute, 7 / (121000 / 60000));
+assert.equal(timeSummary.averageTimePerDay, 40500);
+assert.equal(timeSummary.averageTimePerReviewDay, 40500);
+assert.equal(timeSummary.averageTimePerCard, 81000 / 7);
+assert.equal(timeSummary.cardsPerMinute, 7 / (81000 / 60000));
 assert.equal(timeSummary.percentageDaysStudied, 100);
 const gappedTime = [dailyTime[0], { ...dailyTime[1], date: localDay(2024, 1, 3) }];
 const gappedTimeSummary = calculateTimeStatsSummary(gappedTime, heatmapStart, localDay(2024, 1, 5));

@@ -1,7 +1,34 @@
 import { Card } from '@remnote/plugin-sdk';
 import { AnalysisRange, addCalendarDays, dateOnlyToTimestamp } from './dateRange';
+import { addLocalDays, calendarDayDiff, eachLocalDay, startOfLocalDay } from './calendar';
+import {
+  getScoreName,
+  isForgot,
+  isGradedReview,
+  isRecall,
+  isValidReviewDate,
+  ReviewScore,
+  ScoreName,
+} from './reviewScores';
 
-const LIMIT = 1483225200000; // 1.1.2017 (unix timestamp)
+type ReviewLike = { date: number; score?: number; responseTime?: number };
+type CardLike = Pick<Card, '_id' | 'remId'> & {
+  repetitionHistory?: ReviewLike[] | null;
+  nextRepetitionTime?: number;
+};
+
+/**
+ * Single answers longer than this are capped when adding up time spent, so a
+ * card left open while you walk away does not count as 20 minutes of study.
+ * Anki uses the same default.
+ */
+export const DEFAULT_MAX_RESPONSE_TIME_MS = 60_000;
+
+/** Interval (days since the previous review) at which a card counts as mature. */
+export const MATURE_INTERVAL_DAYS = 21;
+
+/** Lapses within the analysed period at which a card is flagged as a leech. */
+export const DEFAULT_LEECH_THRESHOLD = 8;
 
 export function getAnalysisTimestamps(range?: AnalysisRange): { start: number; end: number } {
   if (!range) return { start: 0, end: Infinity };
@@ -12,232 +39,250 @@ export function getAnalysisTimestamps(range?: AnalysisRange): { start: number; e
   };
 }
 
+export function capResponseTime(responseTime: number, capMs: number = DEFAULT_MAX_RESPONSE_TIME_MS): number {
+  return capMs > 0 ? Math.min(responseTime, capMs) : responseTime;
+}
+
+// ---------------------------------------------------------------------------
+// Daily buckets: one pass over the review history that most charts derive from
+// ---------------------------------------------------------------------------
+
+export interface DailyReviewBucket {
+  date: number; // local midnight
+  reviews: number; // graded reviews (Forgot/Hard/Good/Easy)
+  forgot: number;
+  remembered: number;
+  skipped: number;
+  timeMs: number; // capped time of timed graded reviews
+  responseTimesMs: number[]; // raw response times of timed graded reviews
+}
+
 /**
- * Gets future due cards grouped by day
+ * Groups every graded review between `start` and `end` (inclusive) by local day.
+ * Returns only days that contain at least one review or skip, sorted by date.
  */
-export function getFutureDueCards(allCards: Card[] | undefined, daysOutlook: number): [number, number][] {
-  if (!allCards) return [];
-  
-  const futureDueCards = allCards.filter((card) => card.nextRepetitionTime && card.nextRepetitionTime > Date.now());
-  const futureDueDates = futureDueCards.map((card) => new Date(card.nextRepetitionTime!));
-  
-  const futureDueDatesGroupedByDay = futureDueDates.reduce((r, a) => {
-    r[a.toDateString()] = ++r[a.toDateString()] || 1;
-    return r;
-  }, Object.create(Object));
-  
-  const data = Object.keys(futureDueDatesGroupedByDay || {}).map((key) => {
-    return [Date.parse(key), futureDueDatesGroupedByDay[key]] as [number, number];
-  });
-  
-  data.sort((a, b) => a[0] - b[0]);
-  
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayUnix = Number(today.getTime());
-  const days = Number(daysOutlook);
-  const futureDueDatesGroupedByDayUnix = Array.from({ length: days }, (v, i) => 
-    [todayUnix + i * 24 * 60 * 60 * 1000, 0] as [number, number]
-  );
-  
-  for (let i = 0; i < data.length; i++) {
-    for (let j = 0; j < futureDueDatesGroupedByDayUnix.length; j++) {
-      if (new Date(data[i][0]).toDateString() === new Date(futureDueDatesGroupedByDayUnix[j][0]).toDateString()) {
-        futureDueDatesGroupedByDayUnix[j][1] = data[i][1];
+export function buildDailyReviewBuckets(
+  cards: CardLike[] | undefined,
+  start: number = 0,
+  end: number = Infinity,
+  capMs: number = DEFAULT_MAX_RESPONSE_TIME_MS,
+): DailyReviewBucket[] {
+  if (!cards || cards.length === 0) return [];
+  const buckets = new Map<number, DailyReviewBucket>();
+
+  for (const card of cards) {
+    const history = card.repetitionHistory;
+    if (!history) continue;
+    for (const rep of history) {
+      if (!isValidReviewDate(rep.date) || rep.date < start || rep.date > end) continue;
+      const graded = isGradedReview(rep.score);
+      const skipped = rep.score === ReviewScore.SKIP;
+      if (!graded && !skipped) continue;
+
+      const day = startOfLocalDay(rep.date);
+      let bucket = buckets.get(day);
+      if (!bucket) {
+        bucket = { date: day, reviews: 0, forgot: 0, remembered: 0, skipped: 0, timeMs: 0, responseTimesMs: [] };
+        buckets.set(day, bucket);
+      }
+
+      if (skipped) {
+        bucket.skipped++;
+        continue;
+      }
+      bucket.reviews++;
+      if (isForgot(rep.score)) bucket.forgot++;
+      else bucket.remembered++;
+      if (rep.responseTime && rep.responseTime > 0) {
+        bucket.timeMs += capResponseTime(rep.responseTime, capMs);
+        bucket.responseTimesMs.push(rep.responseTime);
       }
     }
   }
-  
-  return futureDueDatesGroupedByDayUnix;
+
+  return [...buckets.values()].sort((a, b) => a.date - b.date);
 }
+
+/** Number of graded reviews across all cards (skips and schedule edits excluded). */
+export function countGradedReviews(cards: CardLike[] | undefined): number {
+  if (!cards) return 0;
+  let total = 0;
+  for (const card of cards) {
+    for (const rep of card.repetitionHistory || []) {
+      if (isGradedReview(rep.score) && isValidReviewDate(rep.date)) total++;
+    }
+  }
+  return total;
+}
+
+// ---------------------------------------------------------------------------
+// Forecast
+// ---------------------------------------------------------------------------
+
+export interface DueForecastDay {
+  date: number; // local midnight
+  due: number; // cards scheduled for this day
+  overdue: number; // backlog carried into this day (only ever set on day 0)
+}
+
+export interface DueForecast {
+  days: DueForecastDay[];
+  overdueCount: number;
+}
+
+/**
+ * Forecasts due cards per calendar day, starting today.
+ *
+ * Cards whose due time has already passed are the backlog: they are reported as
+ * `overdueCount` and shown on today's bar. Only cards that have been reviewed at
+ * least once count towards the backlog, so brand-new cards don't inflate it.
+ */
+export function getDueForecast(
+  cards: CardLike[] | undefined,
+  daysOutlook: number,
+  now: number = Date.now(),
+): DueForecast {
+  const days = Math.max(0, Math.floor(Number(daysOutlook) || 0));
+  const dayStarts = eachLocalDay(now, addLocalDays(now, days - 1)).slice(0, days);
+  const result: DueForecastDay[] = dayStarts.map(date => ({ date, due: 0, overdue: 0 }));
+  if (!cards || result.length === 0) return { days: result, overdueCount: 0 };
+
+  const indexByDay = new Map(result.map((day, index) => [day.date, index]));
+  let overdueCount = 0;
+
+  for (const card of cards) {
+    const next = card.nextRepetitionTime;
+    if (!next || !Number.isFinite(next)) continue;
+
+    if (next <= now) {
+      const reviewed = (card.repetitionHistory || []).some(rep => isGradedReview(rep.score));
+      if (reviewed) overdueCount++;
+      continue;
+    }
+
+    const index = indexByDay.get(startOfLocalDay(next));
+    if (index !== undefined) result[index].due++;
+  }
+
+  if (result.length > 0) result[0].overdue = overdueCount;
+  return { days: result, overdueCount };
+}
+
+/**
+ * Due cards per day as `[timestamp, count]`, including today's backlog.
+ * Kept for callers that only need the plain series.
+ */
+export function getFutureDueCards(
+  allCards: CardLike[] | undefined,
+  daysOutlook: number,
+  now: number = Date.now(),
+): [number, number][] {
+  return getDueForecast(allCards, daysOutlook, now).days.map(day => [day.date, day.due + day.overdue]);
+}
+
+/**
+ * Median answer time (capped) of graded reviews in the last `lookbackDays`.
+ * Falls back to the full history when there is no recent timed review.
+ */
+export function getTypicalResponseTime(
+  cards: CardLike[] | undefined,
+  now: number = Date.now(),
+  lookbackDays: number = 30,
+  capMs: number = DEFAULT_MAX_RESPONSE_TIME_MS,
+): number | undefined {
+  if (!cards || cards.length === 0) return undefined;
+  const since = addLocalDays(now, -lookbackDays);
+  const recent: number[] = [];
+  const all: number[] = [];
+
+  for (const card of cards) {
+    for (const rep of card.repetitionHistory || []) {
+      if (!isGradedReview(rep.score) || !isValidReviewDate(rep.date)) continue;
+      if (!rep.responseTime || rep.responseTime <= 0) continue;
+      const value = capResponseTime(rep.responseTime, capMs);
+      all.push(value);
+      if (rep.date >= since && rep.date <= now) recent.push(value);
+    }
+  }
+
+  const values = recent.length > 0 ? recent : all;
+  if (values.length === 0) return undefined;
+  values.sort((a, b) => a - b);
+  return getInterpolatedQuantile(values, 0.5);
+}
+
+// ---------------------------------------------------------------------------
+// Score and repetition distributions
+// ---------------------------------------------------------------------------
 
 /**
  * Gets number of repetitions grouped by score
  */
-export function getNumberRepetitionsGroupedByScore(allCards: Card[] | undefined) {
-  const data = { "Skip": 0, "Forgot": 0, "Hard": 0, "Good": 0, "Easy": 0 };
+export function getNumberRepetitionsGroupedByScore(allCards: CardLike[] | undefined): Record<ScoreName, number> {
+  const data: Record<ScoreName, number> = { Skip: 0, Forgot: 0, Hard: 0, Good: 0, Easy: 0 };
   if (!allCards) return data;
-  
-  for (let i = 0; i < allCards.length; i++) {
-    const history = allCards[i].repetitionHistory;
-    if (!history) continue;
-    
-    for (let j = 0; j < history.length; j++) {
-      let score = history[j].score;
-      switch (score) {
-        case 0.01: data["Skip"]++; break;
-        case 0: data["Forgot"]++; break;
-        case 0.5: data["Hard"]++; break;
-        case 1: data["Good"]++; break;
-        case 1.5: data["Easy"]++; break;
-      }
+
+  for (const card of allCards) {
+    for (const rep of card.repetitionHistory || []) {
+      const name = getScoreName(rep.score);
+      if (name) data[name]++;
     }
   }
   return data;
 }
 
 /**
- * Gets number of cards grouped by repetition count
+ * Gets number of cards grouped by how many graded reviews they have.
  */
-export function getNumberCardsGroupedByRepetitions(allCards: Card[] | undefined) {
+export function getNumberCardsGroupedByRepetitions(allCards: CardLike[] | undefined): { x: number; y: number }[] {
   if (!allCards) return [];
-  
-  const allCardsWithRepetitionHistory = allCards.filter((card) => card.repetitionHistory && card.repetitionHistory.length > 0);
-  const repetitionsPerCard = allCardsWithRepetitionHistory.map(
-    (card) => card.repetitionHistory!.length
-  );
-  
-  const repetitionsGroupedByNumber = repetitionsPerCard.reduce((r, a) => {
-    r[a] = ++r[a] || 1;
-    return r;
-  }, Object.create(Object));
-  
-  const data = Object.keys(repetitionsGroupedByNumber || {}).map((key) => {
-    return { x: Number(key), y: repetitionsGroupedByNumber[key] };
-  });
-  
-  return data;
+
+  const counts = new Map<number, number>();
+  for (const card of allCards) {
+    const reviews = (card.repetitionHistory || []).filter(rep => isGradedReview(rep.score)).length;
+    if (reviews === 0) continue;
+    counts.set(reviews, (counts.get(reviews) || 0) + 1);
+  }
+
+  return [...counts.entries()]
+    .map(([x, y]) => ({ x, y }))
+    .sort((a, b) => a.x - b.x);
 }
 
-/**
- * Gets repetitions per day as object
- */
-export function getRepetitionsPerDayObject(allCards: Card[] | undefined) {
-  if (!allCards) return [];
-  
-  const repetitionHistory = allCards.map((card) => card.repetitionHistory);
-  const repetitionHistoryDates = repetitionHistory
-    .filter(rep => rep !== undefined)
-    .flatMap((repetition) => repetition!.map((rep) => rep.date))
-    .filter(date => date !== undefined) as number[];
-  
-  const sortedDates = repetitionHistoryDates.sort((a, b) => a - b);
-  const dates = sortedDates.map((date) => new Date(date)).filter((date) => !isNaN(date.getTime()));
-  
-  const repetitionHistoryDatesFlatSortedDatesGroupedByDay = dates.reduce((r, a) => {
-    r[a.toDateString()] = ++r[a.toDateString()] || 1;
-    return r;
-  }, Object.create(Object));
-  
-  const repetitionHistoryDatesFlatSortedDatesGroupedByDayUnix = Object.keys(
-    repetitionHistoryDatesFlatSortedDatesGroupedByDay || {}
-  ).map((key) => {
-    return {
-      date: new Date(key).getTime(),
-      repetitions: repetitionHistoryDatesFlatSortedDatesGroupedByDay[key]
-    };
-  });
-  
-  return repetitionHistoryDatesFlatSortedDatesGroupedByDayUnix;
-}
+// ---------------------------------------------------------------------------
+// Heatmap
+// ---------------------------------------------------------------------------
 
 /**
- * Gets repetitions per day optimized for heatmap
+ * Graded reviews per calendar day for the heatmap, including empty days.
+ * Open bounds (0 / Infinity) are narrowed to the first / last review.
  */
 export function getRepetitionsPerDayOptimized(
-  allCards: Card[], 
-  startLimit: number, 
+  allCards: CardLike[],
+  startLimit: number,
   endLimit: number
 ): { x: number; y: number }[] {
-  console.log(`Processing ${allCards.length} cards...`);
-  const dailyCounts = new Map<string, number>();
-  let minTs = Infinity;
-  let maxTs = -Infinity;
+  const buckets = buildDailyReviewBuckets(allCards, startLimit, endLimit).filter(day => day.reviews > 0);
+  if (buckets.length === 0) return [];
 
-  for (let i = 0; i < allCards.length; i++) {
-    const history = allCards[i].repetitionHistory;
-    if (!history) continue;
-    
-    for (let j = 0; j < history.length; j++) {
-      const ts = history[j].date;
-      if (ts < startLimit || ts > endLimit) continue;
-      if (ts <= LIMIT) continue;
+  const counts = new Map(buckets.map(day => [day.date, day.reviews]));
+  const finalStart = startLimit === 0 ? buckets[0].date : startLimit;
+  const finalEnd = endLimit === Infinity ? buckets[buckets.length - 1].date : endLimit;
 
-      if (ts < minTs) minTs = ts;
-      if (ts > maxTs) maxTs = ts;
-
-      const dayKey = new Date(ts).toDateString();
-      const current = dailyCounts.get(dayKey) || 0;
-      dailyCounts.set(dayKey, current + 1);
-    }
-  }
-
-  if (dailyCounts.size === 0) return [];
-
-  const finalStart = (startLimit === 0) ? minTs : startLimit;
-  const finalEnd = (endLimit === Infinity) ? maxTs : endLimit;
-
-  const result: { x: number; y: number }[] = [];
-  const current = new Date(finalStart);
-  const end = new Date(finalEnd);
-  current.setHours(0, 0, 0, 0);
-  
-  while (current <= end) {
-    const key = current.toDateString();
-    result.push({
-      x: current.getTime(),
-      y: dailyCounts.get(key) || 0
-    });
-    current.setDate(current.getDate() + 1);
-  }
-
-  return result;
-}
-
-/**
- * Categorize data by weekday for heatmap
- */
-export function categorizeDataByWeekday(data: { x: number; y: number }[]) {
-  const WeekdaySeries = {
-    "Monday": [] as any[], 
-    "Tuesday": [] as any[], 
-    "Wednesday": [] as any[], 
-    "Thursday": [] as any[], 
-    "Friday": [] as any[], 
-    "Saturday": [] as any[], 
-    "Sunday": [] as any[]
-  };
-
-  for (let i = 0; i < data.length; i++) {
-    const dataPoint = data[i];
-    const weekday = new Date(dataPoint.x).getDay();
-
-    switch (weekday) {
-      case 0: WeekdaySeries.Sunday.push(dataPoint); break;
-      case 1: WeekdaySeries.Monday.push(dataPoint); break;
-      case 2: WeekdaySeries.Tuesday.push(dataPoint); break;
-      case 3: WeekdaySeries.Wednesday.push(dataPoint); break;
-      case 4: WeekdaySeries.Thursday.push(dataPoint); break;
-      case 5: WeekdaySeries.Friday.push(dataPoint); break;
-      case 6: WeekdaySeries.Saturday.push(dataPoint); break;
-    }
-  }
-  
-  return WeekdaySeries;
+  return eachLocalDay(finalStart, finalEnd).map(day => ({ x: day, y: counts.get(day) || 0 }));
 }
 
 /**
  * Get longest streak of days with reviews
  */
 export function getLongestStreak(data: { x: number; y: number }[]): number {
-  if (!data || data.length === 0) return 0;
-  
   let streak = 0;
-  let longestStreak = 0;
-  
-  for (let i = 0; i < data.length; i++) {
-    if (data[i].y > 0) {
-      streak++;
-    } else {
-      if (streak > longestStreak) {
-        longestStreak = streak;
-      }
-      streak = 0;
-    }
+  let longest = 0;
+  for (const point of data || []) {
+    streak = point.y > 0 ? streak + 1 : 0;
+    if (streak > longest) longest = streak;
   }
-  
-  if (streak > longestStreak) longestStreak = streak;
-  return longestStreak;
+  return longest;
 }
 
 /**
@@ -245,59 +290,83 @@ export function getLongestStreak(data: { x: number; y: number }[]): number {
  */
 export function getDailyAverage(data: { x: number; y: number }[]): number {
   if (!data || data.length === 0) return 0;
-  
-  let sum = 0;
-  for (let i = 0; i < data.length; i++) {
-    sum += data[i].y;
-  }
-  
+  const sum = data.reduce((total, point) => total + point.y, 0);
   return Math.round(sum / data.length);
 }
 
+// ---------------------------------------------------------------------------
+// Retention
+// ---------------------------------------------------------------------------
+
+export interface DailyRetentionCounts {
+  x: number; // local midnight
+  remembered: number;
+  forgot: number;
+}
+
+/** Remembered / forgot counts per study day. */
+export function getRetentionCountsPerDay(allCards: CardLike[] | undefined): DailyRetentionCounts[] {
+  return buildDailyReviewBuckets(allCards)
+    .filter(day => day.reviews > 0)
+    .map(day => ({ x: day.date, remembered: day.remembered, forgot: day.forgot }));
+}
+
+const toPercent = (remembered: number, total: number) => Math.round((remembered / total) * 1000) / 10;
+
 /**
- * Gets retention rate over time (percentage of remembered vs forgotten)
+ * Gets retention rate per study day (percentage of remembered vs forgotten)
  */
-export function getRetentionRateOverTime(allCards: Card[] | undefined): { x: number; y: number }[] {
-  if (!allCards) return [];
-
-  const dailyStats = new Map<string, { forgot: number; remembered: number }>();
-
-  for (const card of allCards) {
-    const history = card.repetitionHistory;
-    if (!history) continue;
-
-    for (const rep of history) {
-      if (rep.date <= LIMIT) continue;
-
-      const dayKey = new Date(rep.date).toDateString();
-      const stats = dailyStats.get(dayKey) || { forgot: 0, remembered: 0 };
-
-      if (rep.score === 0) {
-        stats.forgot += 1;
-      } else if (rep.score === 0.5 || rep.score === 1 || rep.score === 1.5) {
-        stats.remembered += 1;
-      }
-
-      dailyStats.set(dayKey, stats);
-    }
-  }
-
-  if (dailyStats.size === 0) return [];
-
-  const result: { x: number; y: number }[] = [];
-  for (const [dayKey, stats] of dailyStats) {
-    const total = stats.forgot + stats.remembered;
-    if (total === 0) continue;
-    const retention = (stats.remembered / total) * 100;
-    result.push({ x: new Date(dayKey).getTime(), y: Math.round(retention * 10) / 10 });
-  }
-
-  result.sort((a, b) => a.x - b.x);
-  return result;
+export function getRetentionRateOverTime(allCards: CardLike[] | undefined): { x: number; y: number }[] {
+  return getRetentionCountsPerDay(allCards).map(day => ({
+    x: day.x,
+    y: toPercent(day.remembered, day.remembered + day.forgot),
+  }));
 }
 
 /**
- * Computes a simple moving average series from (x,y) data.
+ * Retention over a trailing window of `windowDays` *calendar* days, weighted by
+ * review count. Emitted for each study day once the window is fully covered by
+ * the data (i.e. at least `windowDays` after the first study day).
+ */
+export function getWeightedRetentionMovingAverage(
+  data: DailyRetentionCounts[],
+  windowDays: number
+): { x: number; y: number }[] {
+  if (!data || data.length === 0 || windowDays <= 0) return [];
+
+  const result: { x: number; y: number }[] = [];
+  const firstDay = data[0].x;
+  let windowStart = 0;
+  let remembered = 0;
+  let forgot = 0;
+
+  for (let i = 0; i < data.length; i++) {
+    remembered += data[i].remembered;
+    forgot += data[i].forgot;
+    while (calendarDayDiff(data[windowStart].x, data[i].x) >= windowDays) {
+      remembered -= data[windowStart].remembered;
+      forgot -= data[windowStart].forgot;
+      windowStart++;
+    }
+    if (calendarDayDiff(firstDay, data[i].x) < windowDays - 1) continue;
+    if (remembered + forgot > 0) result.push({ x: data[i].x, y: toPercent(remembered, remembered + forgot) });
+  }
+  return result;
+}
+
+/** Retention of all reviews from the first study day up to each day, weighted by review count. */
+export function getWeightedCumulativeRetention(data: DailyRetentionCounts[]): { x: number; y: number }[] {
+  let remembered = 0;
+  let forgot = 0;
+  return (data || []).map(day => {
+    remembered += day.remembered;
+    forgot += day.forgot;
+    return { x: day.x, y: toPercent(remembered, remembered + forgot) };
+  });
+}
+
+/**
+ * Computes a simple moving average series over consecutive points.
  */
 export function getMovingAverageSeries(
   data: { x: number; y: number }[],
@@ -307,39 +376,92 @@ export function getMovingAverageSeries(
 
   const result: { x: number; y: number }[] = [];
   let sum = 0;
-
   for (let i = 0; i < data.length; i++) {
     sum += data[i].y;
-    if (i >= windowSize) {
-      sum -= data[i - windowSize].y;
-    }
-    if (i >= windowSize - 1) {
-      const avg = sum / windowSize;
-      result.push({ x: data[i].x, y: Math.round(avg * 10) / 10 });
-    }
+    if (i >= windowSize) sum -= data[i - windowSize].y;
+    if (i >= windowSize - 1) result.push({ x: data[i].x, y: Math.round((sum / windowSize) * 10) / 10 });
   }
-
   return result;
 }
 
 /**
- * Computes cumulative average series from (x,y) data.
+ * Computes the unweighted cumulative average of (x,y) points.
  */
 export function getCumulativeAverageSeries(
   data: { x: number; y: number }[]
 ): { x: number; y: number }[] {
-  if (!data || data.length === 0) return [];
-
-  const result: { x: number; y: number }[] = [];
   let sum = 0;
+  return (data || []).map((point, index) => {
+    sum += point.y;
+    return { x: point.x, y: Math.round((sum / (index + 1)) * 10) / 10 };
+  });
+}
 
-  for (let i = 0; i < data.length; i++) {
-    sum += data[i].y;
-    const avg = sum / (i + 1);
-    result.push({ x: data[i].x, y: Math.round(avg * 10) / 10 });
+export interface RetentionBucket {
+  remembered: number;
+  forgot: number;
+  total: number;
+  retentionRate?: number; // 0-100, undefined without reviews
+}
+
+export interface RetentionByMaturity {
+  young: RetentionBucket; // interval 1..20 days
+  mature: RetentionBucket; // interval >= 21 days
+  learningReviews: number; // first reviews and same-day relearning, excluded above
+}
+
+function toRetentionBucket(remembered: number, forgot: number): RetentionBucket {
+  const total = remembered + forgot;
+  return { remembered, forgot, total, retentionRate: total > 0 ? toPercent(remembered, total) : undefined };
+}
+
+/**
+ * Splits retention into young and mature cards, like Anki's "true retention".
+ *
+ * A review's interval is the number of calendar days since the card's previous
+ * graded review. The first review of a card and reviews on the same day as the
+ * previous one (learning / relearning steps) are counted as learning reviews
+ * and left out, because they say little about long-term memory.
+ *
+ * Pass the cards with their *full* history so intervals that started before the
+ * selected period are measured correctly; only reviews between `start` and
+ * `end` are counted.
+ */
+export function getRetentionByMaturity(
+  allCards: CardLike[] | undefined,
+  start: number = 0,
+  end: number = Infinity,
+  matureDays: number = MATURE_INTERVAL_DAYS,
+): RetentionByMaturity {
+  let youngRemembered = 0, youngForgot = 0, matureRemembered = 0, matureForgot = 0, learningReviews = 0;
+
+  for (const card of allCards || []) {
+    const reviews = (card.repetitionHistory || [])
+      .filter(rep => isGradedReview(rep.score) && isValidReviewDate(rep.date))
+      .sort((a, b) => a.date - b.date);
+
+    let previous: number | undefined;
+    for (const rep of reviews) {
+      const inRange = rep.date >= start && rep.date <= end;
+      const interval = previous === undefined ? undefined : calendarDayDiff(previous, rep.date);
+      previous = rep.date;
+      if (!inRange) continue;
+
+      if (interval === undefined || interval < 1) {
+        learningReviews++;
+      } else if (interval >= matureDays) {
+        if (isRecall(rep.score)) matureRemembered++; else matureForgot++;
+      } else {
+        if (isRecall(rep.score)) youngRemembered++; else youngForgot++;
+      }
+    }
   }
 
-  return result;
+  return {
+    young: toRetentionBucket(youngRemembered, youngForgot),
+    mature: toRetentionBucket(matureRemembered, matureForgot),
+    learningReviews,
+  };
 }
 
 /**
@@ -347,23 +469,21 @@ export function getCumulativeAverageSeries(
  */
 export function interpolateColor(color1: string, color2: string, factor: number = 0.5): string {
   if (!/^#[0-9A-F]{6}$/i.test(color1) || !/^#[0-9A-F]{6}$/i.test(color2)) {
-    return color1; 
+    return color1;
   }
-  
-  const r1 = parseInt(color1.substring(1, 3), 16);
-  const g1 = parseInt(color1.substring(3, 5), 16);
-  const b1 = parseInt(color1.substring(5, 7), 16);
 
-  const r2 = parseInt(color2.substring(1, 3), 16);
-  const g2 = parseInt(color2.substring(3, 5), 16);
-  const b2 = parseInt(color2.substring(5, 7), 16);
-
-  const r = Math.round(r1 + factor * (r2 - r1));
-  const g = Math.round(g1 + factor * (g2 - g1));
-  const b = Math.round(b1 + factor * (b2 - b1));
+  const channel = (color: string, offset: number) => parseInt(color.substring(offset, offset + 2), 16);
+  const mix = (offset: number) => Math.round(channel(color1, offset) + factor * (channel(color2, offset) - channel(color1, offset)));
+  const r = mix(1);
+  const g = mix(3);
+  const b = mix(5);
 
   return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
 }
+
+// ---------------------------------------------------------------------------
+// Hardest cards
+// ---------------------------------------------------------------------------
 
 /**
  * Represents a card with difficulty metrics
@@ -375,22 +495,52 @@ export interface HardCardData {
   forgotCount: number;
   rememberedCount: number;
   retentionRate: number; // 0-100 percentage
+  /** Upper end of the 95% Wilson interval for the retention rate (0-100). */
+  retentionUpperBound: number;
+  isLeech: boolean;
   lastReviewDate: number | null;
 }
 
 /**
- * Gets the hardest cards based on retention rate (lowest retention = hardest)
- * Only includes cards with a minimum number of reviews to ensure statistical significance.
- * 
- * @param allCards - Array of all cards to analyze
+ * Upper bound of the Wilson score interval for `successes` out of `total`.
+ * A small sample gets a wide interval, so 0/3 is *less* certainly bad than 5/50.
+ */
+export function wilsonUpperBound(successes: number, total: number, z: number = 1.96): number {
+  if (total <= 0) return 1;
+  const p = successes / total;
+  const z2 = z * z;
+  const centre = p + z2 / (2 * total);
+  const margin = z * Math.sqrt((p * (1 - p)) / total + z2 / (4 * total * total));
+  return Math.min(1, (centre + margin) / (1 + z2 / total));
+}
+
+/** Lower bound of the Wilson score interval for `successes` out of `total`. */
+export function wilsonLowerBound(successes: number, total: number, z: number = 1.96): number {
+  if (total <= 0) return 0;
+  const p = successes / total;
+  const z2 = z * z;
+  const centre = p + z2 / (2 * total);
+  const margin = z * Math.sqrt((p * (1 - p)) / total + z2 / (4 * total * total));
+  return Math.max(0, (centre - margin) / (1 + z2 / total));
+}
+
+/**
+ * Gets the hardest cards: those we can be most confident have low retention.
+ *
+ * Cards are ranked by the upper bound of the 95% Wilson interval of their
+ * retention rate (lowest first). This keeps cards with few reviews from crowding
+ * out cards that have failed consistently over many reviews.
+ *
+ * @param allCards - Cards to analyze (usually already filtered to the period)
  * @param limit - Maximum number of cards to return
- * @param minReviews - Minimum reviews required to be included (default: 3)
- * @returns Array of HardCardData sorted by retention rate (ascending = hardest first)
+ * @param minReviews - Minimum graded reviews required to be included
+ * @param leechThreshold - Lapses at which a card is flagged as a leech
  */
 export function getHardestCards(
-  allCards: Card[] | undefined, 
+  allCards: CardLike[] | undefined,
   limit: number = 10,
-  minReviews: number = 3
+  minReviews: number = 3,
+  leechThreshold: number = DEFAULT_LEECH_THRESHOLD,
 ): HardCardData[] {
   if (!allCards || allCards.length === 0) return [];
 
@@ -402,29 +552,21 @@ export function getHardestCards(
 
     let forgotCount = 0;
     let rememberedCount = 0;
+    let markedAsLeech = false;
     let lastReviewDate: number | null = null;
 
     for (const rep of history) {
-      if (rep.date <= LIMIT) continue;
-      
-      // Track last review date
-      if (lastReviewDate === null || rep.date > lastReviewDate) {
-        lastReviewDate = rep.date;
-      }
+      if (!isValidReviewDate(rep.date)) continue;
+      if (rep.score === ReviewScore.VIEWED_AS_LEECH) markedAsLeech = true;
+      if (!isGradedReview(rep.score)) continue;
 
-      // Score 0 = Forgot, 0.5/1/1.5 = Hard/Good/Easy (remembered)
-      if (rep.score === 0) {
-        forgotCount++;
-      } else if (rep.score === 0.5 || rep.score === 1 || rep.score === 1.5) {
-        rememberedCount++;
-      }
-      // Skip score 0.01 (skipped cards)
+      if (lastReviewDate === null || rep.date > lastReviewDate) lastReviewDate = rep.date;
+      if (isForgot(rep.score)) forgotCount++;
+      else rememberedCount++;
     }
 
     const totalReviews = forgotCount + rememberedCount;
     if (totalReviews < minReviews) continue;
-
-    const retentionRate = (rememberedCount / totalReviews) * 100;
 
     cardStats.push({
       cardId: card._id,
@@ -432,22 +574,25 @@ export function getHardestCards(
       totalReviews,
       forgotCount,
       rememberedCount,
-      retentionRate: Math.round(retentionRate * 10) / 10,
-      lastReviewDate
+      retentionRate: toPercent(rememberedCount, totalReviews),
+      retentionUpperBound: Math.round(wilsonUpperBound(rememberedCount, totalReviews) * 1000) / 10,
+      isLeech: markedAsLeech || forgotCount >= leechThreshold,
+      lastReviewDate,
     });
   }
 
-  // Sort by retention rate ascending (lowest = hardest) 
-  // If same retention rate, sort by forgot count descending (more forgot = harder)
-  cardStats.sort((a, b) => {
-    if (a.retentionRate !== b.retentionRate) {
-      return a.retentionRate - b.retentionRate;
-    }
-    return b.forgotCount - a.forgotCount;
-  });
+  cardStats.sort((a, b) =>
+    a.retentionUpperBound - b.retentionUpperBound
+    || a.retentionRate - b.retentionRate
+    || b.forgotCount - a.forgotCount
+  );
 
   return cardStats.slice(0, limit);
 }
+
+// ---------------------------------------------------------------------------
+// Time of day
+// ---------------------------------------------------------------------------
 
 /**
  * Represents retention rate data for a time of day block
@@ -461,134 +606,76 @@ export interface TimeOfDayRetention {
   retentionRate: number; // 0-100 percentage
 }
 
+const TIME_BLOCK_LABELS = [
+  '12 AM - 3 AM', '3 AM - 6 AM', '6 AM - 9 AM', '9 AM - 12 PM',
+  '12 PM - 3 PM', '3 PM - 6 PM', '6 PM - 9 PM', '9 PM - 12 AM',
+];
+
 /**
  * Gets retention rate by time of day in 3-hour blocks
- * Shows when during the day the user has the best/worst retention
- * 
- * @param allCards - Array of all cards to analyze
- * @returns Array of TimeOfDayRetention for each 3-hour block
  */
-export function getRetentionRateByTimeOfDay(allCards: Card[] | undefined): TimeOfDayRetention[] {
+export function getRetentionRateByTimeOfDay(allCards: CardLike[] | undefined): TimeOfDayRetention[] {
   if (!allCards || allCards.length === 0) return [];
 
-  // Define 3-hour blocks (8 blocks total)
-  const timeBlocks = [
-    { label: '12 AM - 3 AM', startHour: 0 },
-    { label: '3 AM - 6 AM', startHour: 3 },
-    { label: '6 AM - 9 AM', startHour: 6 },
-    { label: '9 AM - 12 PM', startHour: 9 },
-    { label: '12 PM - 3 PM', startHour: 12 },
-    { label: '3 PM - 6 PM', startHour: 15 },
-    { label: '6 PM - 9 PM', startHour: 18 },
-    { label: '9 PM - 12 AM', startHour: 21 }
-  ];
-
-  // Initialize stats for each block
-  const blockStats = timeBlocks.map(block => ({
-    timeBlock: block.label,
-    startHour: block.startHour,
+  const blockStats: TimeOfDayRetention[] = TIME_BLOCK_LABELS.map((label, index) => ({
+    timeBlock: label,
+    startHour: index * 3,
     forgotCount: 0,
     rememberedCount: 0,
     totalReviews: 0,
-    retentionRate: 0
+    retentionRate: 0,
   }));
 
-  // Process all reviews
   for (const card of allCards) {
-    const history = card.repetitionHistory;
-    if (!history) continue;
-
-    for (const rep of history) {
-      if (rep.date <= LIMIT) continue;
-
-      // Get hour of the day (0-23)
-      const date = new Date(rep.date);
-      const hour = date.getHours();
-
-      // Find which 3-hour block this belongs to
-      const blockIndex = Math.floor(hour / 3);
-      
-      if (blockIndex < 0 || blockIndex >= 8) continue; // Safety check
-
-      // Score 0 = Forgot, 0.5/1/1.5 = Hard/Good/Easy (remembered)
-      if (rep.score === 0) {
-        blockStats[blockIndex].forgotCount++;
-      } else if (rep.score === 0.5 || rep.score === 1 || rep.score === 1.5) {
-        blockStats[blockIndex].rememberedCount++;
-      }
-      // Skip score 0.01 (skipped cards)
+    for (const rep of card.repetitionHistory || []) {
+      if (!isValidReviewDate(rep.date) || !isGradedReview(rep.score)) continue;
+      const block = blockStats[Math.floor(new Date(rep.date).getHours() / 3)];
+      if (isForgot(rep.score)) block.forgotCount++;
+      else block.rememberedCount++;
     }
   }
 
-  // Calculate retention rates
   for (const block of blockStats) {
     block.totalReviews = block.forgotCount + block.rememberedCount;
-    if (block.totalReviews > 0) {
-      block.retentionRate = Math.round((block.rememberedCount / block.totalReviews) * 1000) / 10;
-    }
+    if (block.totalReviews > 0) block.retentionRate = toPercent(block.rememberedCount, block.totalReviews);
   }
 
   return blockStats;
 }
 
+// ---------------------------------------------------------------------------
+// Time spent and recall speed
+// ---------------------------------------------------------------------------
+
 /**
  * Represents time statistics for a specific day
  */
 export interface DailyTimeStats {
-  date: number; // Unix timestamp
-  timeMs: number; // Total time in milliseconds
-  reviewCount: number; // Number of reviews
-  responseTimesMs: number[]; // Individual valid response times
+  date: number; // Unix timestamp (local midnight)
+  timeMs: number; // Total time in milliseconds, each answer capped
+  reviewCount: number; // Number of timed reviews
+  responseTimesMs: number[]; // Individual raw response times
 }
 
 /**
- * Gets time spent per day from card repetition history
- * @param allCards - Array of all cards to analyze
- * @param startLimit - Start date timestamp (default: 0)
- * @param endLimit - End date timestamp (default: Infinity)
- * @returns Array of daily time statistics
+ * Gets time spent per day from card repetition history.
+ * Each answer is capped at `capMs` (0 disables the cap) when adding up time;
+ * the raw values are kept in `responseTimesMs` for speed statistics.
  */
 export function getTimeSpentPerDay(
-  allCards: Card[] | undefined,
+  allCards: CardLike[] | undefined,
   startLimit: number = 0,
-  endLimit: number = Infinity
+  endLimit: number = Infinity,
+  capMs: number = DEFAULT_MAX_RESPONSE_TIME_MS,
 ): DailyTimeStats[] {
-  if (!allCards || allCards.length === 0) return [];
-
-  const dailyStats = new Map<string, { timeMs: number; count: number; responseTimesMs: number[] }>();
-
-  for (const card of allCards) {
-    const history = card.repetitionHistory;
-    if (!history) continue;
-
-    for (const rep of history) {
-      if (rep.date < startLimit || rep.date > endLimit) continue;
-      if (rep.date <= LIMIT) continue;
-      if (!rep.responseTime || rep.responseTime <= 0) continue;
-
-      const dayKey = new Date(rep.date).toDateString();
-      const stats = dailyStats.get(dayKey) || { timeMs: 0, count: 0, responseTimesMs: [] };
-      stats.timeMs += rep.responseTime;
-      stats.count += 1;
-      stats.responseTimesMs.push(rep.responseTime);
-      dailyStats.set(dayKey, stats);
-    }
-  }
-
-  if (dailyStats.size === 0) return [];
-
-  const result: DailyTimeStats[] = [];
-  for (const [dayKey, stats] of dailyStats) {
-    result.push({
-      date: new Date(dayKey).getTime(),
-      timeMs: stats.timeMs,
-      reviewCount: stats.count,
-      responseTimesMs: stats.responseTimesMs
-    });
-  }
-
-  result.sort((a, b) => a.date - b.date);
-  return result;
+  return buildDailyReviewBuckets(allCards, startLimit, endLimit, capMs)
+    .filter(day => day.responseTimesMs.length > 0)
+    .map(day => ({
+      date: day.date,
+      timeMs: day.timeMs,
+      reviewCount: day.responseTimesMs.length,
+      responseTimesMs: day.responseTimesMs,
+    }));
 }
 
 /**
@@ -847,28 +934,16 @@ export function calculateTimeStatsSummary(
 
   // Calculate the full calendar span, including days without reviews. For open
   // date ranges, use the first and last days represented by the available data.
-  const dayMs = 24 * 60 * 60 * 1000;
-  const firstReviewDay = Math.min(...dailyData.map(day => day.date));
-  const lastReviewDayEnd = new Date(Math.max(...dailyData.map(day => day.date)));
-  lastReviewDayEnd.setDate(lastReviewDayEnd.getDate() + 1);
+  const firstReviewDay = dailyData.reduce((min, day) => Math.min(min, day.date), Infinity);
+  const lastReviewDay = dailyData.reduce((max, day) => Math.max(max, day.date), -Infinity);
   const periodStart = startDate ?? firstReviewDay;
-  const periodEnd = endDate ?? lastReviewDayEnd.getTime();
-  const startDay = new Date(periodStart);
-  const endDay = new Date(periodEnd);
-  const startCalendarDay = Date.UTC(startDay.getFullYear(), startDay.getMonth(), startDay.getDate());
-  const endCalendarDay = Date.UTC(endDay.getFullYear(), endDay.getMonth(), endDay.getDate());
-  const totalDaysInPeriod = Math.max(
-    Math.round((endCalendarDay - startCalendarDay) / dayMs),
-    dailyData.length
-  );
+  const periodEnd = endDate ?? addLocalDays(lastReviewDay, 1);
+  const totalDaysInPeriod = Math.max(calendarDayDiff(periodStart, periodEnd), dailyData.length);
 
   const averageTimePerDay = totalDaysInPeriod > 0 ? totalTimeMs / totalDaysInPeriod : 0;
   const averageTimePerReviewDay = daysWithReviews > 0 ? totalTimeMs / daysWithReviews : 0;
   const averageTimePerCard = totalReviews > 0 ? totalTimeMs / totalReviews : 0;
-  
-  // Cards per minute: (totalReviews / (totalTimeMs / 60000))
   const cardsPerMinute = totalTimeMs > 0 ? (totalReviews / (totalTimeMs / 60000)) : 0;
-  
   const percentageDaysStudied = totalDaysInPeriod > 0 ? (daysWithReviews / totalDaysInPeriod) * 100 : 0;
 
   return {
@@ -887,8 +962,7 @@ export function calculateTimeStatsSummary(
 /**
  * Format milliseconds to human-readable time string
  * @param ms - Time in milliseconds
- * @param format - Format type ('short' for "1h 23m", 'long' for "1 hour 23 minutes", 'hours' for "1.38h")
- * @returns Formatted time string
+ * @param format - 'short' ("1h 23m"), 'long' ("1 hour 23 minutes"), 'hours' ("1.38h"), 'seconds' ("4.20s")
  */
 export function formatTime(ms: number, format: 'short' | 'long' | 'hours' | 'seconds' = 'short'): string {
   if (ms === 0) {
@@ -897,23 +971,15 @@ export function formatTime(ms: number, format: 'short' | 'long' | 'hours' | 'sec
     return '0s';
   }
 
+  if (format === 'hours') return `${(ms / (1000 * 60 * 60)).toFixed(2)}h`;
+  if (format === 'seconds') return `${(ms / 1000).toFixed(2)}s`;
+
   const totalSeconds = Math.floor(ms / 1000);
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
 
-  if (format === 'hours') {
-    const hoursDecimal = ms / (1000 * 60 * 60);
-    return `${hoursDecimal.toFixed(2)}h`;
-  }
-
-  if (format === 'seconds') {
-    const secondsDecimal = ms / 1000;
-    return `${secondsDecimal.toFixed(2)}s`;
-  }
-
   const parts: string[] = [];
-  
   if (hours > 0) {
     parts.push(format === 'long' ? `${hours} hour${hours > 1 ? 's' : ''}` : `${hours}h`);
   }
@@ -926,3 +992,4 @@ export function formatTime(ms: number, format: 'short' | 'long' | 'hours' | 'sec
 
   return parts.join(' ') || '0s';
 }
+

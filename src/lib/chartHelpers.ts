@@ -1,28 +1,25 @@
-import { Card } from '@remnote/plugin-sdk';
-
-/**
- * Common chart color - can be overridden by settings
- */
-export let chartColor = '#3362f0';
+/** Default accent colour, used when the setting is missing or invalid. */
+export const DEFAULT_CHART_COLOR = '#3362f0';
 
 const HEX_COLOR_PATTERN = /^#[0-9A-F]{6}$/i;
 
-/** Returns the configured accent when valid, otherwise RemNote's native link token. */
-export function getSafeChartAccent(color: string = chartColor): string {
-  return HEX_COLOR_PATTERN.test(color) ? color : 'var(--rn-clr-link)';
+export function isHexColor(value: unknown): value is string {
+  return typeof value === 'string' && HEX_COLOR_PATTERN.test(value);
 }
 
-/**
- * Updates the global chart color
- */
-export function setChartColor(color: string) {
-  if (HEX_COLOR_PATTERN.test(color)) chartColor = color;
+/** Returns the configured accent when valid, otherwise RemNote's native link token. */
+export function getSafeChartAccent(color: string | undefined): string {
+  return isHexColor(color) ? color : 'var(--rn-clr-link)';
 }
 
 /**
  * Returns common chart configuration options
  */
-export function getCommonChartOptions(title: string, xaxisType: 'datetime' | 'category' | 'numeric') {
+export function getCommonChartOptions(
+  title: string,
+  xaxisType: 'datetime' | 'category' | 'numeric',
+  accent: string = DEFAULT_CHART_COLOR,
+) {
   return {
     chart: {
       foreColor: 'var(--rn-clr-content-primary)',
@@ -54,7 +51,7 @@ export function getCommonChartOptions(title: string, xaxisType: 'datetime' | 'ca
       offsetX: 0,
       offsetY: 0
     },
-    colors: [getSafeChartAccent()],
+    colors: [getSafeChartAccent(accent)],
     xaxis: {
       type: xaxisType,
       labels: { 
@@ -158,7 +155,7 @@ export function getInputStyle() {
 /**
  * Gets button style based on selection state
  */
-export function getButtonStyle(isSelected: boolean, color: string = chartColor) {
+export function getButtonStyle(isSelected: boolean, color: string) {
   const safeColor = getSafeChartAccent(color);
   return {
     backgroundColor: isSelected ? safeColor : 'var(--rn-clr-background-primary)',
@@ -181,11 +178,11 @@ export function transformObjectToCategoryFormat(data: Record<string, number>) {
 }
 
 /**
- * Calculate retention rate from button pressed data
+ * Retention as a fraction (0-1) from button counts, or undefined without reviews.
  */
-export function retentionRate(data: Record<string, number>) {
+export function getRetentionRate(data: Record<string, number>): number | undefined {
   const forgot = data["Forgot"] || 0;
   const remembered = (data["Hard"] || 0) + (data["Good"] || 0) + (data["Easy"] || 0);
-  if ((forgot + remembered) === 0) return "No Data";
-  return (remembered / (forgot + remembered)).toFixed(2);
+  const total = forgot + remembered;
+  return total === 0 ? undefined : remembered / total;
 }

@@ -10,3 +10,5 @@ _bmad/*
 .github/*
 _bmad-output/*
 AGENTS.md
+# Keep CI workflows under version control
+!.github/workflows/
