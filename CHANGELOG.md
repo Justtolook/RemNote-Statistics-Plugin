@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.7.1] - 2026-11-23
+
+### Fixed
+
+- The Statistics button and the session fatigue pill in the queue toolbar now use a transparent background, so they match RemNote's redesigned queue instead of showing a mismatched box (#20).
+
 ## [1.7.0] - 2026-11-22
 
 ### Added

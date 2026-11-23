@@ -528,7 +528,10 @@
   gap: 0.25rem;
   padding: 0.5rem 0.25rem;
   margin: 0 0.5rem;
-  background-color: var(--rn-clr-background-secondary);
+  /* Transparent so the button blends into whatever background the queue
+     toolbar uses (RemNote's redesigned queue no longer matches
+     --rn-clr-background-secondary). */
+  background-color: transparent;
   border: 1px solid var(--rn-clr-border-primary);
   border-radius: 6px;
   color: var(--rn-clr-content-primary);
@@ -540,7 +543,8 @@
 }
 
 .queue-stats-button:hover {
-  background-color: var(--rn-clr-background-tertiary);
+  /* Translucent overlay works on light and dark toolbars alike. */
+  background-color: rgba(127, 127, 127, 0.12);
   transform: translateY(-1px);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
@@ -638,6 +642,14 @@
 }
 
 /* Live session fatigue in the queue toolbar */
+
+/* The toolbar widget renders in its own iframe; keep it transparent so the
+   queue's own background shows through. */
+html:has(.queue-toolbar-group),
+body:has(.queue-toolbar-group) {
+  background-color: transparent;
+}
+
 .queue-toolbar-group {
   display: flex;
   align-items: center;
@@ -665,7 +677,7 @@
   padding: 0.3rem 0.5rem;
   border: 1px solid var(--rn-clr-border-primary);
   border-radius: 9999px;
-  background-color: var(--rn-clr-background-secondary);
+  background-color: transparent;
   cursor: help;
 }
 
