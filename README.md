@@ -158,16 +158,116 @@ The dashboard is organized into seven sections:
 - **Context-Specific Analysis**: Analyze individual subjects or courses using Current Rem mode
 - **Data-Driven Decisions**: Use moving averages to see long-term retention trends beyond daily fluctuations
 
-## 📋 What's New in 1.7.0
+## 📋 Changelog
 
-- **Live session fatigue in the queue**: see how tired you are while reviewing, and get a break suggestion at the right time
-- **Your forgetting curve**: recall by time since the last review, against your target
-- **Session fatigue**: when your retention drops during a session, and when to take a break
-- **Young vs. mature retention** compared against your own target retention
-- **Workload forecast** with your overdue backlog and time estimates per day
-- **Breakdown by document** (or by child Rem) with retention, time, lapses and leeches
-- **Leech badges** on cards you keep forgetting
-- Fixes for the forecast around daylight-saving changes, weighted retention averages, skips no longer counted as reviews, and more
+
+### Version 1.7.0 (Current)
+**New Features:**
+- ☕ **Live Session Fatigue in the Queue**: A small indicator next to the Statistics button shows how long your current session has been running and how tired you likely are (Fresh / Getting tired / Tired)
+  - Compares session time against your personal break point, recent recall against your usual recall, and answer speed against your usual speed
+  - Suggests a short break when it is time; the suggestion can be snoozed for 10 minutes
+  - Can be turned off in the settings ("Show session fatigue in the queue")
+- 📉 **Your Forgetting Curve**: Recall rate by days since the previous review (1 day, 2–3, 4–7, … 241+), compared with your target retention, with a plain-language verdict
+- 😴 **Session Fatigue Analysis**: Retention and median answer time by minutes into a study session, with a recommended break point (a pause over 10 minutes starts a new session)
+- 🌱 **Young vs. Mature Retention**: Retention split into young (1–20 days) and mature (21+ days) cards, compared against your target retention
+- 🎯 **Target Retention** setting (default 90%), also drawn as a target line on the retention-over-time chart
+- 🔮 **Workload Forecast**: "Overdue now", "Due today" and "Next N days" cards with time estimates based on your median answer time
+- 📂 **Breakdown by Document**: Reviews, retention, time, lapses and leeches per top-level document (Global) or per child Rem (Current Rem); click a row to open the Rem
+- 🩸 **Leech Badges**: Cards forgotten 8+ times (configurable) or marked as a leech by RemNote are flagged
+- ⏲️ **Maximum Answer Time** setting (default 60 s): longer answers are capped when adding up time spent
+
+**Bug Fixes:**
+- The due-card forecast no longer shifts by one day after a daylight-saving change, and now includes cards that are already due or overdue
+- The 7d and 30d retention averages now cover calendar days and are weighted by review count
+- Skips, leech prompts, resets and manual schedule edits are no longer counted as reviews
+- "Cards to Improve" now ranks cards by the upper bound of the 95% confidence interval of their retention
+- "Days studied" and the per-day time average no longer count one day too few
+- "This Week" / "Last Week" follow your locale's first day of the week
+- Changing the chart colour in the settings now always re-renders the charts
+
+**Technical Improvements:**
+- Split the dashboard into focused modules (`src/widgets/statistics/`) with all derived data computed in one memoised hook
+- Review scores are named constants (`src/lib/reviewScores.ts`)
+- The "Current Rem" dataset is only loaded while that mode is selected
+- Added ESLint, `npm test`, and a GitHub Actions workflow running type checks, lint, tests and build
+
+### Version 1.6.0
+**New Features:**
+- ⏱️ **Time Spent Reviewing Statistics**: Comprehensive time tracking for flashcard reviews
+  - New "Time Spent" metric card in Review Statistics section showing total review time
+  - **Time Spent Reviewing Chart**: Anki-style bar chart displaying daily time spent in minutes
+  - **Summary Statistics Panel**: View total time, average per day, average per study day, and average per card
+  - **Productivity Metrics**: Cards per minute rate and percentage of days studied
+  - **Recall Speed Trend**: Daily average and median response time using the 5th–95th percentile, with a weighted 7-study-day average and comparison to the preceding 7 study days
+  - **Response Time Distribution**: Horizontal box plot showing selected-period quartiles, Tukey whiskers, and outlier counts
+  - **Smart Time Formatting**: Displays time in hours, minutes, or seconds depending on magnitude
+  - Uses `responseTime` data from RemNote's repetition history
+  - Gracefully handles missing time data with appropriate empty state messages
+
+**Technical Improvements:**
+- Added `getTimeSpentPerDay()` function for daily time aggregation
+- Added `calculateTimeStatsSummary()` for comprehensive time statistics
+- Added `formatTime()` utility with multiple format options
+- Enhanced TypeScript interfaces with `DailyTimeStats` and `TimeStatsSummary`
+- Updated grid layout to accommodate 5 metric cards in Review Statistics section
+
+
+### Version 1.5.0
+**New Features:**
+- ✨ Added Queue Toolbar Button for quick access during flashcard reviews
+- 📊 Added Retention Rate Over Time chart with multiple trend lines:
+  - Daily retention percentage
+  - 7-day moving average (smoothed weekly trends)
+  - 30-day moving average (smoothed monthly trends)
+  - Cumulative average (all-time retention from start date)
+- 🔥 **Hardest Flashcards Section**: New analysis tool that identifies your most challenging cards
+  - Ranks cards by lowest retention rate (percentage of successful recalls)
+  - Requires minimum 3 reviews per card for statistical significance
+  - Displays forgot count, total reviews, and retention percentage
+  - **Clickable rows** - click any card to navigate directly to its Rem for editing/improvement
+- ⏰ **Retention Rate by Time of Day**: New chart showing productivity patterns throughout the day
+  - Displays retention rate in 3-hour blocks (8 blocks from 12 AM to 12 AM)
+  - Color-coded bars (green/yellow/orange/red) for quick visual assessment
+  - Highlights your most productive time block with best retention rate
+  - Shows total reviews, forgot count, and remembered count for each time block
+  - Helps identify optimal study times for maximum retention
+
+
+### Version 1.4.0
+**UI/UX Improvements:**
+- 🎨 Comprehensive visual overhaul with better spacing and typography
+- 🎴 Stat cards with hover effects and color coding
+- 📱 Enhanced mobile responsiveness with improved touch interactions
+
+
+### Version 1.3.1 (thanks to @hugomarins)
+**Features:**
+- Comprehensive Context Mode: Enhanced Rem scope analysis
+
+### Version 1.3.0 (thanks to @hugomarins)
+**Features:**
+- Major code refactoring and bug fixes 
+- Quick Presets: One-click buttons for Week, Month, Year, Last Year, and All Time (Thanks to @hugomarins)
+- Mobile Support: Fully responsive design for tablets and smartphones
+- Custom Date Range: Precise date pickers for start/end dates
+
+**Performance:**
+- ⚡ Optimized data fetching for large scopes (>200 Rems)
+
+
+### Version 1.1.1 
+**Improvements:**
+- Scrollable popup widget (Thanks to @bjsi)
+
+### Version <=1.0.0 (Initial Release)
+**Core Features:**
+- Basic statistics dashboard with retention rate
+- Review heatmap visualization
+- Button press distribution analysis
+- Future due cards forecast
+- Global and Current Rem context modes
+- Customizable chart colors
+
 
 See the full history in [CHANGELOG.md](https://github.com/Justtolook/RemNote-Statistics-Plugin/blob/main/CHANGELOG.md).
 
